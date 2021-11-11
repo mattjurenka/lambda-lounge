@@ -1,0 +1,28 @@
+name = "my-app"
+type = "javascript"
+workers_dev = true
+compatibility_date = "2021-11-11"
+
+kv_namespaces = [ 
+    #{ binding = "LAMBDA_LOUNGE", id = "e65e266635e34805ab5d8df5e6039beb" },
+    { binding = "TEST_LOUNGE", preview_id = "7ab04eb9590948b4a587caa01ede1c5a" }
+]
+
+[vars]
+WORKERS_RS_VERSION = "0.0.7"
+
+[build]
+command = "cargo install -q worker-build && worker-build --release" # required
+
+[build.upload]
+dir    = "build/worker"
+format = "modules"
+main   = "./shim.mjs"
+
+[[build.upload.rules]]
+globs = ["**/*.wasm"]
+type  = "CompiledWasm"
+
+
+# read more about configuring your Worker via wrangler.toml at:
+# https://developers.cloudflare.com/workers/cli-wrangler/configuration
