@@ -290,7 +290,9 @@ name = "my-app"
 version = "0.1.0"
 dependencies = [
  "cfg-if 0.1.10",
+ "chrono",
  "console_error_panic_hook",
+ "futures 0.3.17",
  "js-sys",
  "serde",
  "serde_json",

@@ -4,8 +4,9 @@ workers_dev = true
 compatibility_date = "2021-11-11"
 
 kv_namespaces = [ 
-    #{ binding = "LAMBDA_LOUNGE", id = "e65e266635e34805ab5d8df5e6039beb" },
-    { binding = "TEST_LOUNGE", preview_id = "7ab04eb9590948b4a587caa01ede1c5a" }
+    { binding = "POSTS", preview_id = "57782d2d126042f29dc5e0d03460956f" },
+    { binding = "POST_FILES", preview_id = "f79de75abfad4f91bad5d24eeda195ad" },
+    { binding = "TIMESTAMP_INDEX", preview_id = "08ff0d6214894b42bec91488727f84cd" },
 ]
 
 [vars]
