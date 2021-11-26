@@ -12,6 +12,7 @@ use utils::{Post, ListPostsResponse};
 
 //Gets recent posts by order of most to least recent
 pub async fn get_recent_posts(_: Request, ctx: RouteContext<()>) -> Result<Response> {
+    println!("Hello2");
     let posts = ctx.kv("POSTS")?;
     let timestamp_index = ctx.kv("TIMESTAMP_INDEX")?;
     let mut posts_list_options = timestamp_index.list()
@@ -76,7 +77,7 @@ pub async fn post_posts(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
                             &format!("{}:{}", rev_timestamp, hash), ""
                         )?.execute(),
                         timestamp_user_index.put(
-                            &format!("{}:{}:{}", 0, rev_timestamp, hash), ""
+                        &format!("{}:{}:{}", 0, rev_timestamp, hash), ""
                         )?.execute(),
                     );
                     Response::empty()
@@ -99,63 +100,61 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
     // routes to access and share using the `ctx.data()` method.
     let router = Router::new();
 
+    println!("Hello");
     router
-        .get_async("/posts/by_time/", |_req, _ctx| async move {
-            //Get all posts ordered by most recent
-            //sorts the rev_timestamp -> post association
-            
-            //Get the top n keys on POSTS_TIMESTAMP
-            //Make paginated
-
-            Response::ok("Hello World")
-        })
-        .get_async("/posts/file/:id/", |req, ctx| async move {
-            //Get the actual file associated with the post
-            todo!()
-        })
-        .get_async("/posts/by_user_timestamp/:id/", |req, ctx| async move {
-            //Get posts of a user orered by most recent
-            //Query TIMESTAMP_USER_IDX for a list of 
-            todo!()
-        })
+        //Get all posts ordered by most recent
+        //sorts the rev_timestamp -> post association
+        
+        //Get the top n keys on POSTS_TIMESTAMP
+        //Make paginated
+        .get_async("/posts/by_time/", get_recent_posts)
+        //.get_async("/posts/file/:id/", |req, ctx| async move {
+        //    //Get the actual file associated with the post
+        //    todo!()
+        //})
+        //.get_async("/posts/by_user_timestamp/:id/", |req, ctx| async move {
+        //    //Get posts of a user orered by most recent
+        //    //Query TIMESTAMP_USER_IDX for a list of 
+        //    todo!()
+        //})
         .post_async("/posts/", post_posts)
-        .get_async("/saved/check/:id/", |mut req, ctx| async move {
-            //Takes a user id, and a list of posts in the query param
-            //and returns the posts in that list that are saved
-            
-            //query SAVED_TIMESTAMP_HASH for a list of all posts saved by user
-            //respond with a comma seperated list of title hashes
-            todo!()
-        })
-        .get_async("/saved/:id/", |mut req, ctx| async move {
-            //Takes a user ID and returns all posts in most recent saved order
+        //.get_async("/saved/check/:id/", |mut req, ctx| async move {
+        //    //Takes a user id, and a list of posts in the query param
+        //    //and returns the posts in that list that are saved
+        //    
+        //    //query SAVED_TIMESTAMP_HASH for a list of all posts saved by user
+        //    //respond with a comma seperated list of title hashes
+        //    todo!()
+        //})
+        //.get_async("/saved/:id/", |mut req, ctx| async move {
+        //    //Takes a user ID and returns all posts in most recent saved order
 
-            //query SAVED_TIMESTAMP_IDX, which returns a list of all saved title
-            //hashes sorted by most to least recent
+        //    //query SAVED_TIMESTAMP_IDX, which returns a list of all saved title
+        //    //hashes sorted by most to least recent
 
-            //Query posts and posts_file for each hash to get the actual post
-            todo!()
-        })
-        .post_async("/save/:uid/:pid/", |mut req, ctx| async move {
-            //Mark user with uid as saving pid
+        //    //Query posts and posts_file for each hash to get the actual post
+        //    todo!()
+        //})
+        //.post_async("/save/:uid/:pid/", |mut req, ctx| async move {
+        //    //Mark user with uid as saving pid
 
-            //Set SAVED and SAVED_TIMESTAMP_IDX with the appropriate values
-            todo!()
-        })
-        .get_async("/comments/:pid/", |mut req, ctx| async move {
-            //Return all comments on a post
+        //    //Set SAVED and SAVED_TIMESTAMP_IDX with the appropriate values
+        //    todo!()
+        //})
+        //.get_async("/comments/:pid/", |mut req, ctx| async move {
+        //    //Return all comments on a post
 
-            //list COMMENTS to get a sorted list of comments, then query again
-            //to get the actual comments and user info
-            todo!()
-        })
-        .post_async("/comment/:uid/:pid/", |mut req, ctx| async move {
-            //Mark user with uid with commenting on pid with comment as a query param
+        //    //list COMMENTS to get a sorted list of comments, then query again
+        //    //to get the actual comments and user info
+        //    todo!()
+        //})
+        //.post_async("/comment/:uid/:pid/", |mut req, ctx| async move {
+        //    //Mark user with uid with commenting on pid with comment as a query param
 
-            //Set COMMENTS and SAVED_TIMESTAMP_IDX with the appropriate value
-            //for each key, query for the comment again
-            todo!()
-        })
+        //    //Set COMMENTS and SAVED_TIMESTAMP_IDX with the appropriate value
+        //    //for each key, query for the comment again
+        //    todo!()
+        //})
         .run(req, env).await
 }
 
