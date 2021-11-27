@@ -1,16 +1,13 @@
 import React from "react"
-import { useLLDispatch, useLLSelector } from "./hooks"
-import {fetch_posts} from "./state/posts"
+import { IonContent, IonPage } from "@ionic/react"
+import PostModal from "./components/post_modal"
+import PostsScroll from "./components/posts_scroll"
 
-const Main = () => {
-    const dispatch = useLLDispatch()
-    const posts = useLLSelector(state => state.posts.posts)
-    return <div>
-        {posts.map((p, idx) => <p id={idx.toString()}>{p}</p>)}
-        <button onClick={_ => dispatch(fetch_posts())}>
-            Add Post
-        </button>
-    </div>
-}
+const Main = () => <IonPage>
+    <IonContent fullscreen>
+        <PostModal />
+        <PostsScroll />
+    </IonContent>
+</IonPage>
 
 export default Main

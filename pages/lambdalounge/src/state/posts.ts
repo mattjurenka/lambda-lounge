@@ -1,7 +1,7 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit"
 
 interface PostsState { 
-    posts: string[]
+    posts: Post[]
     cursor: string
 }
 
@@ -12,10 +12,14 @@ export const postsSlice = createSlice({
         cursor: ""
     } as PostsState,
     reducers: {
-        add_posts: (state, { payload }: PayloadAction<string>) => {
-            state.posts.push(payload)
+        add_posts: (state, { payload }: PayloadAction<Post[]>) => {
+            state.posts = state.posts.concat(payload)
         },
-        upload_post: (_state, _payload: PayloadAction<string>) => {},
+        upload_post: (_state, _payload: PayloadAction<{
+            title: string,
+            description: string,
+            file: File
+        }>) => {},
         fetch_posts: () => {},
     }
 })

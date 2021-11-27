@@ -20,6 +20,7 @@ wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 futures = "0.3.17"
 chrono = "0.4"
+base64 = "0.13.0"
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires

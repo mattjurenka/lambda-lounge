@@ -1,35 +1,93 @@
+use std::future::Future;
+use futures::stream::FuturesUnordered;
 use worker::*;
+use worker::Response;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
-use futures::join;
-use futures::future::join_all;
+use futures::{join};
+use futures::future::select_all;
 use chrono::prelude::*;
+use worker_sys::console_log;
+use futures::stream::{self, StreamExt};
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
+use std::rc::Rc;
+extern crate base64;
 
 mod utils;
 use utils::{Post, ListPostsResponse};
 
+async fn many<I, F>(iter: I) -> Vec<F::Output>
+    where
+        I: Iterator<Item=F>,
+        F: Future
+{
+    let pinned_futs: Vec<_> = iter.into_iter().map(Box::pin).collect();
+    let mut futs = pinned_futs;
+    let mut ret = Vec::new();
+    while !futs.is_empty() {
+        let (r, _idx, remaining) = select_all(futs).await;
+        ret.push(r);
+        futs = remaining;
+    }
+    ret
+}
+
+
+pub async fn get_posts_file(_: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let post_files = ctx.kv("POST_FILES")?;
+    match ctx.param("title") {
+        Some(title) => {
+            //Calculate hash of title
+            let mut hasher = DefaultHasher::new();
+            title.hash(&mut hasher);
+            let hash = &hasher.finish().to_string();
+            match post_files.get(hash).await? {
+                Some(file) => {
+                    if let Ok(bytes) = base64::decode(file.as_string()) {
+                        let mut headers = Headers::new();
+                        headers.set("Content-Type", "image/jpeg")?;
+                        Response::from_body(ResponseBody::Body(bytes))
+                            .map(|r| r.with_headers(headers))
+                    } else {
+                        Response::error("File is corrupted", 400)
+                    }
+                }
+                None => Response::error("File not found", 400)
+            }
+        }
+        None => {
+            Response::error("Could not parse Title", 400)
+        }
+    }
+}
 
 //Gets recent posts by order of most to least recent
 pub async fn get_recent_posts(_: Request, ctx: RouteContext<()>) -> Result<Response> {
-    println!("Hello2");
     let posts = ctx.kv("POSTS")?;
     let timestamp_index = ctx.kv("TIMESTAMP_INDEX")?;
+
     let mut posts_list_options = timestamp_index.list()
         .limit(25);
     if let Some(cursor) = ctx.param("cursor") {
         posts_list_options = posts_list_options.cursor(cursor.to_string());
     }
     let posts_list = posts_list_options.execute().await?;
-    let post_responses = join_all(
-        posts_list.keys.iter().map(|key| posts.get(&key.name))
-    ).await;
-    let posts: Vec<Post> = post_responses.into_iter()
-        .filter_map(|res| res.ok())
-        .filter_map(|opt| opt)
-        .filter_map(|value| value.as_json::<Post>().ok())
+
+    let hashes: Vec<_> = posts_list.keys.iter()
+        .filter_map(|k| k.name.split("_").nth(1))
         .collect();
-    let response = ListPostsResponse::new(posts, &posts_list.cursor.unwrap_or("".to_string()));
+
+    let p = &posts;
+    let recent_posts: Vec<Post> = many(hashes.iter().map(|key| p.get(key))).await.into_iter()
+        .filter_map(|opt| opt.ok())
+        .filter_map(|value| value.and_then(|post_json| post_json.as_json::<Post>().ok()))
+        .collect();
+
+    let response = ListPostsResponse::new(
+        recent_posts, &posts_list.cursor.unwrap_or("".to_string())
+    );
     Response::from_json(&response)
 }
 
@@ -53,7 +111,6 @@ pub async fn post_posts(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
                         );
                     }
 
-
                     let posts = ctx.kv("POSTS")?;
                     let post_files = ctx.kv("POST_FILES")?;
                     let timestamp_index = ctx.kv("TIMESTAMP_INDEX")?;
@@ -71,13 +128,15 @@ pub async fn post_posts(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
 
                     //Update POSTS and POST_FILES
                     join!(
-                        posts.put(hash, post_str)?.execute(),
-                        post_files.put(hash, buf.bytes().await?)?.execute(),
+                        posts.put(hash, serde_json::to_string(&post)?)?.execute(),
+                        post_files.put(
+                            hash, base64::encode(buf.bytes().await?)
+                        )?.execute(),
                         timestamp_index.put(
-                            &format!("{}:{}", rev_timestamp, hash), ""
+                            &format!("{}_{}", rev_timestamp, hash), ""
                         )?.execute(),
                         timestamp_user_index.put(
-                        &format!("{}:{}:{}", 0, rev_timestamp, hash), ""
+                            &format!("{}_{}_{}", 0, rev_timestamp, hash), ""
                         )?.execute(),
                     );
                     Response::empty()
@@ -100,18 +159,14 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
     // routes to access and share using the `ctx.data()` method.
     let router = Router::new();
 
-    println!("Hello");
-    router
+    let mut response = router
         //Get all posts ordered by most recent
         //sorts the rev_timestamp -> post association
         
         //Get the top n keys on POSTS_TIMESTAMP
-        //Make paginated
         .get_async("/posts/by_time/", get_recent_posts)
-        //.get_async("/posts/file/:id/", |req, ctx| async move {
-        //    //Get the actual file associated with the post
-        //    todo!()
-        //})
+        //Get the actual file associated with the post
+        .get_async("/posts/file/:title/", get_posts_file)
         //.get_async("/posts/by_user_timestamp/:id/", |req, ctx| async move {
         //    //Get posts of a user orered by most recent
         //    //Query TIMESTAMP_USER_IDX for a list of 
@@ -155,31 +210,35 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
         //    //for each key, query for the comment again
         //    todo!()
         //})
-        .run(req, env).await
+        .run(req, env).await;
+    //set CORS header
+    response.map(|mut r| {
+        r.headers_mut().set("Access-Control-Allow-Origin", "http://localhost:4000").unwrap();
+        r
+    })
 }
 
+//_ is used as a separator
 //POSTS
-//hash_of_title -> 
-//hash_of_title -> {title, description, user_id, timestamp, username file}
-//ex.
+//hash of title -> {title, description, user_id, timestamp, username file}
 
 //POSTS_FILE
-//hash_of_title -> <img file>
+//hash of title -> <img file>
 
 //TIMESTAMP_INDEX
-//rev_timestamp:hash_of_title -> 0
+//rev timestamp_hash of title -> 0
 
 //TIMESTAMP_USER_INDEX
-//user_id:timestamp:hash_of_title -> 0
+//user id_timestamp_hash of title -> 0
 
 //SAVED
-//user_id:hash_of_title -> 0
+//user id_hash of title -> 0
 
 //SAVED_TIMESTAMP_IDX
-//user_id:rev_timestamp:hash_of_title -> 0
+//user id_rev timestamp_hash of title -> 0
 
 //USERS
-//user_id:username -> 0
+//user id_username -> 0
 
 //COMMENTS
-//hash_of_title:rev_timestamp:user_id:username -> comment
+//hash of title_rev timestamp_user id_username -> comment

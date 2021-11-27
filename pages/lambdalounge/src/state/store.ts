@@ -1,6 +1,7 @@
 import { configureStore, combineReducers } from '@reduxjs/toolkit'
-import posts_reducer from "./posts"
+import posts_reducer, {upload_post} from "./posts"
 import { createEpicMiddleware, combineEpics } from "redux-observable"
+import {fetch_posts_epic, upload_posts_epic} from './epics'
 
 
 const reducer = combineReducers({
@@ -8,12 +9,21 @@ const reducer = combineReducers({
 })
 
 
-const rootEpic = combineEpics()
+const rootEpic = combineEpics(
+    upload_posts_epic, fetch_posts_epic
+)
 const epicMiddleware = createEpicMiddleware()
 
 export const store = configureStore({
     reducer,
-    middleware: getDefaultMiddleware => getDefaultMiddleware().concat(epicMiddleware)
+    middleware: getDefaultMiddleware => getDefaultMiddleware({
+        thunk: false,
+        serializableCheck: {
+            ignoredActions: [
+                upload_post.type
+            ]
+        }
+    }).concat(epicMiddleware)
 })
 
 epicMiddleware.run(rootEpic)
