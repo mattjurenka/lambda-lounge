@@ -1,0 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Mono:wght@500&display=swap');
+
+:root {
+    --orange: #F6821F;
+    --dark-blue: #003682;
+    --light-blue: #0055DC;
+    --silver: #C5C5C5;
+    --dark-grey: #0F141A;
+    --light-grey: #1E2834;
+
+    --ion-background-color: #0F141A;
+    --ion-font-family: 'Fira Mono', monospace ;
+}
+
+ion-text {
+    color: var(--silver);
+}
+
+.ion-color-primary {
+    --ion-color-base: var(--orange) !important;
+}
+
+ion-text.subheader {
+    font-size: 24px;
+}
+
+ion-input {
+    --color: var(--silver) !important;
+    --background: var(--light-grey) !important;
+}
+
+ion-textarea {
+    --color: var(--silver) !important;
+    --background: var(--light-grey) !important;
+}

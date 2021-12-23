@@ -14,8 +14,10 @@
     "@ionic/react-router": "^5.9.1",
     "@reduxjs/toolkit": "^1.6.2",
     "axios": "^0.24.0",
+    "lodash": "^4.17.21",
     "react": "^17.0.2",
     "react-dom": "^17.0.2",
+    "react-masonry-component": "^6.3.0",
     "react-redux": "^7.2.6",
     "redux-observable": "^2.0.0",
     "use-immer": "^0.6.0"
@@ -25,6 +27,7 @@
     "@babel/preset-env": "^7.16.4",
     "@babel/preset-react": "^7.16.0",
     "@babel/preset-typescript": "^7.16.0",
+    "@types/lodash": "^4.14.177",
     "@types/react": "^17.0.37",
     "@types/react-dom": "^17.0.11",
     "@types/webpack-env": "^1.16.3",

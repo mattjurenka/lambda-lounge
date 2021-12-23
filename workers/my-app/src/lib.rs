@@ -1,4 +1,4 @@
-use std::future::Future;
+use std::future::{Future};
 use futures::stream::FuturesUnordered;
 use worker::*;
 use worker::Response;
@@ -6,13 +6,15 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
 use futures::{join};
-use futures::future::select_all;
+use futures::future::{select_all};
 use chrono::prelude::*;
 use worker_sys::console_log;
 use futures::stream::{self, StreamExt};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::rc::Rc;
+use std::iter;
+use urlencoding::decode;
 extern crate base64;
 
 mod utils;
@@ -23,21 +25,24 @@ async fn many<I, F>(iter: I) -> Vec<F::Output>
         I: Iterator<Item=F>,
         F: Future
 {
-    let pinned_futs: Vec<_> = iter.into_iter().map(Box::pin).collect();
+    let pinned_futs: Vec<_> = iter.into_iter().enumerate()
+        .map(|(idx, fut)| async move { (idx, fut.await) })
+        .map(Box::pin)
+        .collect();
+    let mut ret: Vec<_> = (0..pinned_futs.len()).map(|_| None).collect();
     let mut futs = pinned_futs;
-    let mut ret = Vec::new();
     while !futs.is_empty() {
         let (r, _idx, remaining) = select_all(futs).await;
-        ret.push(r);
+        ret[r.0] = Some(r.1);
         futs = remaining;
     }
-    ret
+    ret.into_iter().filter_map(|opt| opt).collect()
 }
 
 
 pub async fn get_posts_file(_: Request, ctx: RouteContext<()>) -> Result<Response> {
     let post_files = ctx.kv("POST_FILES")?;
-    match ctx.param("title") {
+    match ctx.param("title").and_then(|encoded| decode(encoded).ok()) {
         Some(title) => {
             //Calculate hash of title
             let mut hasher = DefaultHasher::new();

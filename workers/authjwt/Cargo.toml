@@ -1,0 +1,15 @@
+[package]
+name = "authjwt"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+jsonwebtoken = "7"
+serde = {version = "1.0", features = ["derive"] }
+chrono = "0.4"
+dotenv = "0.15"
+mongodb = "2.1"
+actix-web = "4.0.0-beta.3"
+actix-files = "0.5.0"
