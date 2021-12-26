@@ -3,6 +3,9 @@ use worker::*;
 use serde::{Deserialize, Serialize};
 use chrono::prelude::*;
 use std::char::from_digit;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hash;
+use std::hash::Hasher;
 
 cfg_if! {
     // https://github.com/rustwasm/console_error_panic_hook#readme
@@ -35,11 +38,19 @@ pub fn get_lexicographic_datetime(now: DateTime<Utc>) -> String {
         .collect::<String>()
 }
 
+//Calculate the hash of a post that is used as the post id
+pub fn calculate_hash(username: &String, title: &String) -> String {
+    let mut hasher = DefaultHasher::new();
+    username.hash(&mut hasher);
+    title.hash(&mut hasher);
+    hasher.finish().to_string()
+}
+
 #[derive(Deserialize, Serialize)]
 pub struct Post {
     pub title: String,
     pub description: String,
-    pub user_id: u64,
+    #[serde(default)]
     pub username: String,
     #[serde(default)]
     pub timestamp: String,

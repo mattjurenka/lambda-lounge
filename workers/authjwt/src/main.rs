@@ -3,6 +3,10 @@ use std::time::Instant;
 use std::fs;
 
 use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
+use actix_web::dev::Service;
+use actix_web::http::header;
+use actix_web::http::header::HeaderValue;
+use futures::future::FutureExt;
 
 use mongodb::{
     options::{FindOneAndUpdateOptions, FindOneOptions},
@@ -55,13 +59,16 @@ async fn auth_username(
     ).await.unwrap();
     //Set the user's JWT cookie
     HttpResponse::Ok()
-        .append_header(("Set-Cookie", format!("token={}; HttpOnly; Path=/", token)))
+        .append_header(("Set-Cookie", format!(
+            "token={}; HttpOnly; Path=/", token
+        )))
         .body(env::var("PUBLIC_KEY").unwrap())
 }
 
 //Verify that the JWT is legitimate, returning the username if it is
 #[get("/verify")]
 async fn verify(req: HttpRequest, data: web::Data<AppState>) -> impl Responder {
+    println!("Verifying token...");
     let start = Instant::now();
     match req.cookie("token") {
         Some(cookie) => {
@@ -217,6 +224,20 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(AppState {
                 accesses: accesses.clone()
             }))
+            .wrap_fn(|req, srv| {
+                println!("Request Received...");
+                srv.call(req).map(|res| res.map(|mut r| {
+                    r.headers_mut().append(
+                        header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                        HeaderValue::from_str("http://127.0.0.1:4000").unwrap()
+                    );
+                    r.headers_mut().append(
+                        header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
+                        HeaderValue::from_str("true").unwrap()
+                    );
+                    r
+                }))
+            })
             .service(readme)
             .service(auth_username)
             .service(verify)

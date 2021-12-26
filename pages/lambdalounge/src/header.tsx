@@ -2,8 +2,7 @@ import React, { useState } from "react"
 
 import { get_random_string } from "./utils"
 
-const padding = 32
-
+const padding = 64
 const Header = () => {
     const [rand_strings] = useState([
         padding + 13 + padding, padding, 7 + padding,
@@ -13,13 +12,15 @@ const Header = () => {
         color: "var(--light-grey)",
         fontWeight: "bolder",
         fontSize: "32px",
-        padding: "1em",
-        textAlign: "center",
-        overflow: "hidden",
-        whiteSpace: "nowrap",
-        height: "256px"
+        paddingTop: "1em",
+        paddingBottom: "1em",
+        display: "flex",
+        justifyContent: "center",
+        width: "100%"
     }}>
-        <div style={{position: "absolute", top: "4em", right: "50%", transform: "translate(50%,-50%)"}}>
+        <div style={{
+            whiteSpace: "nowrap"
+        }}>
             {rand_strings[0]}<br />
             {rand_strings[1]}
                 <span style={{

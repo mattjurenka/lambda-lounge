@@ -3,8 +3,9 @@ import {
     IonButton, IonInput, IonItem, IonItemDivider, IonList,
     IonModal, IonTextarea, IonTitle, IonText, IonGrid, IonRow, IonCol
 } from "@ionic/react"
-import {useLLDispatch} from "../hooks"
+import {useLLDispatch, useLLSelector} from "../hooks"
 import {upload_post} from "../state/posts"
+import {register} from "../state/user"
 import { useImmer } from "use-immer"
 
 const default_validation = {
@@ -18,23 +19,60 @@ interface ShowErrorProps {
     field: string
 }
 const ShowError = ({ errors, field }: ShowErrorProps) =>
-    (errors[field] || "") != "" ? <IonText color="danger">{errors[field]}</IonText> : <></>
+    (errors[field] || "") != "" ? <IonText color="danger"><p>{errors[field]}</p></IonText> : <></>
 
 export default () => {
     const dispatch = useLLDispatch()
+
     const [is_open, set_is_open] = useState(false)
     const [title, set_title] = useState<string>("")
     const [description, set_description] = useState<string>("")
     const [file, set_file] = useState<File | null>(null)
     const [errors, update_errors] = useImmer(default_validation)
+
+    const username = useLLSelector(state => state.user.username)
+    const [new_username, set_new_username] = useState("")
+
+    const label_ref = React.useRef<HTMLLabelElement>(null)
+
     return <>
-        <IonButton
-            expand="block"
-            color="primary"
-            onClick={_ => set_is_open(true)}
-        >
-            POST
-        </IonButton>self
+        <IonGrid>
+            <IonRow>
+                <IonCol style={{
+                    display: "flex",
+                    alignItems: "center"
+                }}>
+                {username == "" ?
+                [
+                    <IonInput
+                        value={new_username}
+                        onIonChange={e => set_new_username(e.detail.value || "")}
+                    />,
+                    <IonButton
+                        color="primary"
+                        onClick={_ => dispatch(register(new_username))}
+                    >
+                        LOGIN
+                    </IonButton>
+                ] :
+                [
+                    <IonText color="secondary">Logged in as: {username}</IonText>,
+                    <IonButton
+                        expand="block"
+                        color="primary"
+                        onClick={_ => set_is_open(true)}
+                        style={{
+                            marginLeft: "auto",
+                            width: "256px"
+                        }}
+                    >
+                        POST
+                    </IonButton>
+                ]
+                }
+                </IonCol>
+            </IonRow>
+        </IonGrid>
         <IonModal isOpen={is_open} onDidDismiss={_ => set_is_open(false)}>
             <IonGrid class="ion-padding" style={{
                 width: "100%",
@@ -44,7 +82,10 @@ export default () => {
             }}>
                 <IonRow>
                     <IonCol>
-                        <IonText class="subheader">Share your creation</IonText>
+                        <IonText
+                            color="secondary"
+                            class="subheader"
+                        >Share your creation</IonText>
                     </IonCol>
                 </IonRow>
                 <IonRow>
@@ -61,11 +102,11 @@ export default () => {
                 <IonRow>
                     <IonCol>
                         <IonTextarea
-                            autoGrow
                             value={description}
                             placeholder="Description"
                             onIonChange={e => set_description(e.detail.value || "")}
                             maxlength={1028}
+                            rows={8}
                         />
                         <ShowError errors={errors} field="description" />
                     </IonCol>
@@ -75,14 +116,43 @@ export default () => {
                         <input
                             type="file"
                             name="file"
+                            id="fileInput"
                             onChange={e => set_file(e.target.files?.item(0) || null)}
+                            style={{
+                                display: "none"
+                            }}
                         />
+                        <label
+                            htmlFor="fileInput"
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "1em"
+                            }}
+                            ref={label_ref}
+                        >
+                            <IonButton
+                                color="primary"
+                                onClick={_ => label_ref.current?.click()}
+                            >
+                                UPLOAD
+                            </IonButton>
+                            <IonText color="secondary">{file?.name || "Select A File"}</IonText>
+                        </label>
                         <ShowError errors={errors} field="file" />
                     </IonCol>
                 </IonRow>
                 <IonRow style={{
                     marginTop: "auto"
                 }}>
+                    <IonCol>
+                        <IonText color="secondary">
+                            It might take up to a minute to see your post
+                            appear in your feed.
+                        </IonText>
+                    </IonCol>
+                </IonRow>
+                <IonRow>
                     <IonCol size="4">
                         <IonButton
                             color="danger"

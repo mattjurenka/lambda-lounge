@@ -22,6 +22,7 @@ futures = "0.3.17"
 chrono = "0.4"
 base64 = "0.13.0"
 urlencoding = "2.1.0"
+reqwest = "0.11.8"
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
@@ -37,9 +38,13 @@ wee_alloc = { version = "0.4.2", optional = true }
 [dependencies.web-sys]
 version = "0.3"
 features = [
+    'Headers',
     'Request',
     'Response',
     'ResponseInit',
+    'Request',
+    'Window',
+    'RequestInit',
     'Url',
     'UrlSearchParams',
 ]
