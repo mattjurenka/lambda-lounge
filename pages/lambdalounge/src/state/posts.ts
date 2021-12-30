@@ -3,7 +3,9 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit"
 interface PostsState { 
     posts: Post[]
     cursor: string
-    viewing_user: string
+    viewing_mode: ViewingMode
+    post_modal_open: boolean
+    post_validation_errors: PostValidationErrors
 }
 
 export const postsSlice = createSlice({
@@ -11,7 +13,13 @@ export const postsSlice = createSlice({
     initialState: {
         posts: [],
         cursor: "",
-        viewing_user: "",
+        viewing_mode: ["home"],
+        post_modal_open: false,
+        post_validation_errors: {
+            title: "",
+            description: "",
+            file: ""
+        }
     } as PostsState,
     reducers: {
         set_posts: (state, { payload }: PayloadAction<Post[]>) => {
@@ -23,19 +31,42 @@ export const postsSlice = createSlice({
         upload_post: (_state, _payload: PayloadAction<{
             title: string,
             description: string,
-            file: File
+            file: File | null
         }>) => {},
         fetch_posts: (state) => {
-            state.viewing_user = ""
+            state.viewing_mode = ["home"]
         },
         fetch_user_posts: (state, { payload }: PayloadAction<string>) => {
-            state.viewing_user = payload
+            state.viewing_mode = ["user", payload]
         },
-        delete_post: (_state, _payload: PayloadAction<string>) => {}
+        fetch_saved_posts: state => {
+            state.viewing_mode = ["saved"]
+        },
+        delete_post: (_state, _payload: PayloadAction<string>) => {},
+        save_post: (_state, _payload: PayloadAction<{
+            username: string
+            title: string
+        }>) => {},
+        unsave_post: (_state, _payload: PayloadAction<{
+            username: string
+            title: string
+        }>) => {},
+        open_modal: state => {
+            state.post_modal_open = true
+        },
+        close_modal: state => {
+            state.post_modal_open = false
+        },
+        update_errors: (state, { payload }: PayloadAction<Partial<PostValidationErrors>>) => {
+            state.post_validation_errors = {
+                ...state.post_validation_errors, ...payload
+            }
+        }
     }
 })
 
 export const {
-    add_posts, set_posts, fetch_posts, upload_post, delete_post, fetch_user_posts
+    add_posts, set_posts, fetch_posts, upload_post, delete_post, fetch_user_posts,
+    fetch_saved_posts, save_post, unsave_post, open_modal, close_modal, update_errors
 } = postsSlice.actions
 export default postsSlice.reducer

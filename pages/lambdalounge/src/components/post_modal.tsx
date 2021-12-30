@@ -1,34 +1,26 @@
 import React, { useState } from "react"
 import {
     IonButton, IonInput, IonItem, IonItemDivider, IonList,
-    IonModal, IonTextarea, IonTitle, IonText, IonGrid, IonRow, IonCol
+    IonModal, IonTextarea, IonTitle, IonText, IonGrid, IonRow, IonCol, IonRouterLink
 } from "@ionic/react"
 import {useLLDispatch, useLLSelector} from "../hooks"
-import {upload_post} from "../state/posts"
+import {close_modal, fetch_saved_posts, fetch_user_posts, open_modal, upload_post} from "../state/posts"
 import {register} from "../state/user"
-import { useImmer } from "use-immer"
 
-const default_validation = {
-    title: "",
-    description: "",
-    file: ""
-}
-
-interface ShowErrorProps {
-    errors: {[field: string]: string | undefined},
-    field: string
-}
-const ShowError = ({ errors, field }: ShowErrorProps) =>
-    (errors[field] || "") != "" ? <IonText color="danger"><p>{errors[field]}</p></IonText> : <></>
+const ShowError = (props: {error: string}) =>
+    props.error !== "" ? 
+        <IonRow><IonCol><IonText color="danger">
+            {props.error}
+        </IonText></IonCol></IonRow> : <></>
 
 export default () => {
     const dispatch = useLLDispatch()
 
-    const [is_open, set_is_open] = useState(false)
     const [title, set_title] = useState<string>("")
     const [description, set_description] = useState<string>("")
     const [file, set_file] = useState<File | null>(null)
-    const [errors, update_errors] = useImmer(default_validation)
+    const errors = useLLSelector(state => state.posts.post_validation_errors)
+    const is_open = useLLSelector(state => state.posts.post_modal_open)
 
     const username = useLLSelector(state => state.user.username)
     const [new_username, set_new_username] = useState("")
@@ -45,10 +37,12 @@ export default () => {
                 {username == "" ?
                 [
                     <IonInput
+                        key={0}
                         value={new_username}
                         onIonChange={e => set_new_username(e.detail.value || "")}
                     />,
                     <IonButton
+                        key={1}
                         color="primary"
                         onClick={_ => dispatch(register(new_username))}
                     >
@@ -56,11 +50,38 @@ export default () => {
                     </IonButton>
                 ] :
                 [
-                    <IonText color="secondary">Logged in as: {username}</IonText>,
+                    <IonText key={0} color="secondary">
+                        Logged in as
+                        <IonText
+                            class="ion-margin-top"
+                            color="secondary"
+                            style={{marginLeft: "0.5em", marginRight: "0.5em"}}
+                        >
+                            <IonRouterLink
+                                onClick={_ => dispatch(fetch_user_posts(username))}
+                            >
+                                {username}
+                            </IonRouterLink>
+                        </IonText>
+                        |
+                        <IonText
+                            class="ion-margin-top"
+                            color="secondary"
+                            style={{marginLeft: "0.5em", marginRight: "0.5em"}}
+                        >
+                            <IonRouterLink
+                                onClick={_ => dispatch(fetch_saved_posts())}
+                            >
+                                Saved Posts
+                            </IonRouterLink>
+                        </IonText>
+
+                    </IonText>,
                     <IonButton
+                        key={1}
                         expand="block"
                         color="primary"
-                        onClick={_ => set_is_open(true)}
+                        onClick={_ => dispatch(open_modal())}
                         style={{
                             marginLeft: "auto",
                             width: "256px"
@@ -73,7 +94,7 @@ export default () => {
                 </IonCol>
             </IonRow>
         </IonGrid>
-        <IonModal isOpen={is_open} onDidDismiss={_ => set_is_open(false)}>
+        <IonModal isOpen={is_open} onDidDismiss={_ => dispatch(close_modal())}>
             <IonGrid class="ion-padding" style={{
                 width: "100%",
                 height: "100%",
@@ -96,9 +117,9 @@ export default () => {
                             onIonChange={e => set_title(e.detail.value || "")}
                             maxlength={120}
                         />
-                        <ShowError errors={errors} field="title" />
                     </IonCol>
                 </IonRow>
+                <ShowError error={errors.title} />
                 <IonRow>
                     <IonCol>
                         <IonTextarea
@@ -108,9 +129,9 @@ export default () => {
                             maxlength={1028}
                             rows={8}
                         />
-                        <ShowError errors={errors} field="description" />
                     </IonCol>
                 </IonRow>
+                <ShowError error={errors.description} />
                 <IonRow>
                     <IonCol>
                         <input
@@ -139,15 +160,15 @@ export default () => {
                             </IonButton>
                             <IonText color="secondary">{file?.name || "Select A File"}</IonText>
                         </label>
-                        <ShowError errors={errors} field="file" />
                     </IonCol>
                 </IonRow>
+                <ShowError error={errors.file} />
                 <IonRow style={{
                     marginTop: "auto"
                 }}>
                     <IonCol>
                         <IonText color="secondary">
-                            It might take up to a minute to see your post
+                            It could take up to a minute to see your post
                             appear in your feed.
                         </IonText>
                     </IonCol>
@@ -156,7 +177,7 @@ export default () => {
                     <IonCol size="4">
                         <IonButton
                             color="danger"
-                            onClick={_ => set_is_open(false)}
+                            onClick={_ => dispatch(close_modal())}
                             style={{width: "100%"}}
                         >
                             CANCEL
@@ -167,42 +188,9 @@ export default () => {
                             color="primary"
                             style={{width: "100%"}}
                             onClick={_ => {
-                                if (file == null) {
-                                    update_errors(errors => {errors.file = "No File Uploaded"})
-                                } else if (file.size > 5000000) {
-                                    update_errors(errors => {errors.file = "File cannot be \
-                                        over 5 MB"})
-                                }
-
-                                if (title.length > 120) {
-                                    update_errors(errors =>
-                                        {errors.title = "Title cannot exceed 120 characters"})
-                                } else if (title.length <= 0) {
-                                    update_errors(errors => {
-                                        errors.title = "Title cannot be empty"
-                                    })
-                                }
-
-                                if (description.length > 1028) {
-                                    update_errors(errors => {
-                                        errors.description = "Description cannot exceed \
-                                            1028 characters"
-                                    })
-                                } else if (description.length <= 0) {
-                                    update_errors(errors =>
-                                        {errors.description = "Description cannot be empty"})
-                                }
-
-                                if (
-                                    errors.file == "" && errors.description == "" &&
-                                    errors.title == ""
-                                ) {
-                                    dispatch(upload_post({
-                                        title, description,
-                                        file: (file as File)
-                                    }))
-                                    set_is_open(false)
-                                }
+                                dispatch(upload_post({
+                                    title, description, file
+                                }))
                             }}
                         >
                             POST

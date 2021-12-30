@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::rc::Rc;
 use std::iter;
 use urlencoding::decode;
+use std::borrow::Borrow;
 extern crate base64;
 
 mod utils;
@@ -43,7 +44,7 @@ async fn verify_jwt(cookies: &String) -> Result<String> {
     let mut headers = Headers::new();
     headers.set("Cookie", cookies)?;
     let req = Request::new_with_init(
-        "http://9e6a-67-183-191-15.ngrok.io/verify",
+        "http://0461-67-183-191-15.ngrok.io/verify",
         RequestInit::new()
             .with_headers(headers)
             .with_method(Method::Get)
@@ -85,31 +86,19 @@ pub async fn get_posts_file(_: Request, ctx: RouteContext<()>) -> Result<Respons
 }
 
 //Gets recent posts by order of most to least recent
-pub async fn get_recent_posts(_: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let posts = ctx.kv("POSTS")?;
-    let timestamp_index = ctx.kv("TIMESTAMP_INDEX")?;
+pub async fn get_recent_posts(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let username = match req.headers().get("Cookie")? {
+        Some(cookies) => verify_jwt(&cookies).await.ok(),
+        None => None
+    };
 
-    let mut posts_list_options = timestamp_index.list()
-        .limit(25);
-    if let Some(cursor) = ctx.param("cursor") {
-        posts_list_options = posts_list_options.cursor(cursor.to_string());
+    match get_posts(
+        PostMode::Recent, username, ctx.param("cursor"), &ctx
+    ).await {
+        Ok(posts) => Response::from_json(&posts),
+        Err(_) => Response::error("Unable to get posts", 500)
     }
-    let posts_list = posts_list_options.execute().await?;
 
-    let hashes: Vec<_> = posts_list.keys.iter()
-        .filter_map(|k| k.name.split("_").nth(1))
-        .collect();
-
-    let p = &posts;
-    let recent_posts: Vec<Post> = many(hashes.iter().map(|key| p.get(key))).await.into_iter()
-        .filter_map(|opt| opt.ok())
-        .filter_map(|value| value.and_then(|post_json| post_json.as_json::<Post>().ok()))
-        .collect();
-
-    let response = ListPostsResponse::new(
-        recent_posts, &posts_list.cursor.unwrap_or("".to_string())
-    );
-    Response::from_json(&response)
 }
 
 
@@ -168,8 +157,8 @@ pub async fn post_posts(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
                             );
                             Response::empty()
                         },
-                        Err(e) => {
-                            Response::error("Unable to verify identity", 400)
+                        Err(_) => {
+                            Response::error("Unable to verify identity", 403)
                         },
                     }
                 },
@@ -204,7 +193,7 @@ pub async fn delete_post(req: Request, ctx: RouteContext<()>) -> Result<Response
                 },
                 Err(e) => {
                     console_log!("{}", e);
-                    Response::error("Unable to authenticate user", 400)
+                    Response::error("Unable to authenticate user", 403)
                 }
             }
         },
@@ -213,37 +202,174 @@ pub async fn delete_post(req: Request, ctx: RouteContext<()>) -> Result<Response
     }
 }
 
-pub async fn get_user_posts(_: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub enum PostMode {
+    Recent,
+    OfUser(String),
+    Saved(String)
+}
+
+pub async fn get_posts(
+    mode: PostMode,
+    requesting_user: Option<String>,
+    cursor: Option<&String>,
+    ctx: &RouteContext<()>
+) -> Result<ListPostsResponse> {
+    let posts_store = ctx.kv("POSTS")?;
+    let (index, n) = match mode {
+        PostMode::Recent => (ctx.kv("TIMESTAMP_INDEX")?, 1),
+        PostMode::OfUser(_) => (ctx.kv("TIMESTAMP_USER_INDEX")?, 2),
+        PostMode::Saved(_) => (ctx.kv("SAVED_INDEX")?, 1),
+    };
+    let saved_store = ctx.kv("SAVED_INDEX")?;
+
+    let mut posts_list_options = index.list()
+        .limit(25);
+    if let Some(username) = match mode {
+        PostMode::OfUser(username) | PostMode::Saved(username) => Some(username),
+        _ => None
+    } {
+        posts_list_options = posts_list_options.prefix(username.clone())
+    }
+    if let Some(cursor_str) = cursor {
+        posts_list_options = posts_list_options.cursor(cursor_str.to_string());
+    }
+    let posts_list = posts_list_options.execute().await?;
+
+    let hashes: Vec<_> = posts_list.keys.iter()
+        .filter_map(|k| k.name.split("_").nth(n))
+        .collect();
+    let p = &posts_store;
+    let mut recent_posts: Vec<Post> = many(
+        hashes.iter().map(|key| p.get(key))
+    ).await.into_iter()
+        .filter_map(|opt| opt.ok())
+        .filter_map(
+            |value| value.and_then(|post_json| post_json.as_json::<Post>().ok())
+        )
+        .collect();
+
+    if let Some(username) = requesting_user {
+        let queries: Vec<_> = recent_posts.iter().map(|post| calculate_hash(
+            &post.username, &post.title
+        ))
+            .map(|hash| format!("{}_{}", username, hash))
+            .collect();
+        let s = &saved_store;
+        let saved = many(
+            queries.iter().map(|query| {
+                s.list().prefix(query.into()).execute()
+            })
+        ).await;
+
+        for i in 0..recent_posts.len() {
+            recent_posts[i].saved = match &saved[i] {
+                Ok(res) => Some(res.keys.len() > 0),
+                Err(_) => Some(false),
+            };
+        }
+    }
+
+    Ok(ListPostsResponse::new(
+        recent_posts, &posts_list.cursor.unwrap_or("".to_string())
+    ))
+}
+
+pub async fn get_user_posts(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let user_opt = match req.headers().get("Cookie")? {
+        Some(cookies) => verify_jwt(&cookies).await.ok(),
+        None => None
+    };
     match ctx.param("username").and_then(|v| decode(v).ok()) {
         Some(username) => {
-            let timestamp_user_index = ctx.kv("TIMESTAMP_USER_INDEX")?;
-            let posts = ctx.kv("POSTS")?;
-
-            let mut posts_list_options = timestamp_user_index.list()
-                .limit(25)
-                .prefix(username.into());
-            if let Some(cursor) = ctx.param("cursor") {
-                posts_list_options = posts_list_options.cursor(cursor.to_string());
+            match get_posts(
+                PostMode::OfUser(username.into()),
+                user_opt,
+                ctx.param("cursor"),
+                &ctx
+            ).await {
+                Ok(posts) => Response::from_json(&posts),
+                Err(_) => Response::error("Unable to get posts", 500)
             }
-            let posts_list = posts_list_options.execute().await?;
-            let hashes: Vec<_> = posts_list.keys.iter()
-                .filter_map(|k| k.name.split("_").nth(2))
-                .collect();
-            let p = &posts;
-            let recent_posts: Vec<Post> = many(
-                hashes.iter().map(|key| p.get(key))
-            ).await.into_iter()
-                .filter_map(|opt| opt.ok())
-                .filter_map(
-                    |value| value.and_then(|post_json| post_json.as_json::<Post>().ok())
-                )
-                .collect();
-
-            let response = ListPostsResponse::new(
-                recent_posts, &posts_list.cursor.unwrap_or("".to_string()));
-            Response::from_json(&response)
         },
         None => Response::error("Unable to parse username", 400),
+    }
+}
+
+pub async fn add_saved(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    match (
+        req.headers().get("Cookie"),
+        ctx.param("username").and_then(|v| decode(v).ok()),
+        ctx.param("title").and_then(|v| decode(v).ok())
+    ) {
+        (Ok(Some(cookies)), Some(username), Some(title)) => {
+            match verify_jwt(&cookies).await {
+                Ok(authed_username) => {
+                    let saved = ctx.kv("SAVED_INDEX")?;
+                    
+                    let hash = calculate_hash(&username.into(), &title.into());
+                    join!(
+                        saved.put(&format!(
+                            "{}_{}", authed_username, hash), ""
+                        )?.execute(),
+                    );
+
+                    Response::ok("")
+                },
+                Err(_) => Response::error("Unable to verify identity", 400)
+            }
+        },
+        (Ok(None), _, _) | (Err(_), _, _) => Response::error("No cookies found", 400),
+        (_, None, _) => Response::error("Unable to parse username", 400),
+        (_, _, None) => Response::error("Unable to parse title", 400),
+    }
+}
+
+pub async fn get_saved(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    match req.headers().get("Cookie") {
+        Ok(Some(cookies)) => {
+            match verify_jwt(&cookies).await {
+                Ok(username) => {
+                    match get_posts(
+                        PostMode::Saved(username.clone()),
+                        Some(username),
+                        ctx.param("cursor"),
+                        &ctx
+                    ).await {
+                        Ok(posts) => Response::from_json(&posts),
+                        Err(_) => Response::error("Unable to get posts", 500),
+                    }
+                },
+                Err(_) => Response::error("Unable to verify identity", 400)
+            }
+        },
+        _ => Response::error("Unable to find cookie", 400)
+    }
+}
+
+pub async fn unsave(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    match (
+        req.headers().get("Cookie"),
+        ctx.param("username").and_then(|v| decode(v).ok()),
+        ctx.param("title").and_then(|v| decode(v).ok())
+    ) {
+        (Ok(Some(cookies)), Some(username), Some(title)) => {
+            match verify_jwt(&cookies).await {
+                Ok(authed_username) => {
+                    let saved_store = ctx.kv("SAVED_INDEX")?;
+                    match saved_store.delete(&format!(
+                        "{}_{}",
+                        authed_username,
+                        calculate_hash(&username.into(), &title.into()))
+                    ).await {
+                        Ok(_) => Response::ok(""),
+                        Err(_) => Response::error("Unable to unsave post", 500)
+                    }
+                    
+                },
+                Err(_) => Response::error("Unable to verify identity", 400)
+            }
+        },
+        _ => Response::error("Unable to find cookie", 400)
     }
 }
 
@@ -268,6 +394,27 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
         .post_async("/posts/:username/:title/delete/", delete_post)
         .options(
             "/posts/:username/:title/delete/",
+            |_, _| {
+                let mut r = Response::ok("").unwrap();
+                r.headers_mut().set("Allow", "POST").unwrap();
+                r.headers_mut().set("Access-Control-Allow-Headers", "content-type").unwrap();
+                Ok(r)
+            }
+        )
+        .post_async("/save/:username/:title/", add_saved)
+        .post_async("/unsave/:username/:title/", unsave)
+        .get_async("/posts/saved/", get_saved)
+        .options(
+            "/save/:username/:title/",
+            |_, _| {
+                let mut r = Response::ok("").unwrap();
+                r.headers_mut().set("Allow", "POST").unwrap();
+                r.headers_mut().set("Access-Control-Allow-Headers", "content-type").unwrap();
+                Ok(r)
+            }
+        )
+        .options(
+            "/unsave/:username/:title/",
             |_, _| {
                 let mut r = Response::ok("").unwrap();
                 r.headers_mut().set("Allow", "POST").unwrap();
@@ -337,5 +484,3 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
 //SAVED
 //user id_hash of title -> 0
 
-//SAVED_TIMESTAMP_IDX
-//user id_rev timestamp_hash of title -> 0

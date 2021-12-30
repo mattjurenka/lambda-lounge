@@ -54,6 +54,10 @@ pub struct Post {
     pub username: String,
     #[serde(default)]
     pub timestamp: String,
+    #[serde(default)]
+    pub saved: Option<bool>,
+    #[serde(default)]
+    pub saved_timestamp: Option<String>,
 }
 
 #[derive(Deserialize, Serialize)]

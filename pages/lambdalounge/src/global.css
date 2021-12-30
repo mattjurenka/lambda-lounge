@@ -29,6 +29,14 @@ ion-text.subheader {
     font-size: 24px;
 }
 
+.notistack-error {
+    background-color: var(--danger) !important;
+}
+
+.notistack-success {
+    background-color: var(--orange) !important;
+}
+
 ion-router-link {
     color: var(--orange) !important;
     text-decoration: underline;
