@@ -1,11 +1,12 @@
 import { configureStore, combineReducers } from '@reduxjs/toolkit'
-import posts_reducer, {upload_post} from "./posts"
+import posts_reducer, {fetch_next_page, upload_post} from "./posts"
 import user_reducer, {show_notification} from "./user"
 import { createEpicMiddleware, combineEpics } from "redux-observable"
 import {
     fetch_posts_epic, upload_posts_epic, register_epic, check_logged_in_epic,
     delete_post_epic, fetch_user_posts_epic, fetch_saved_posts_epic, save_post_epic,
-    unsave_post_epic
+    unsave_post_epic,
+    fetch_next_page_epic
 } from './epics'
 import {MyEpic} from './types'
 import {catchError, EMPTY, of} from 'rxjs'
@@ -30,7 +31,7 @@ const rootEpic = combineEpics(
     ...[
         upload_posts_epic, fetch_posts_epic, register_epic, check_logged_in_epic,
         delete_post_epic, fetch_user_posts_epic, fetch_saved_posts_epic, save_post_epic,
-        unsave_post_epic
+        unsave_post_epic, fetch_next_page_epic
     ].map(error_handler)
 )
 const epicMiddleware = createEpicMiddleware()
@@ -41,7 +42,7 @@ export const store = configureStore({
         thunk: false,
         serializableCheck: {
             ignoredActions: [
-                upload_post.type
+                upload_post.type, fetch_next_page.type
             ]
         }
     }).concat(epicMiddleware)

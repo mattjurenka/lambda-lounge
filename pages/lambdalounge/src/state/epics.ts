@@ -5,7 +5,7 @@ import {
 import type { MyEpic } from "./types"
 import {
     set_posts, fetch_posts, add_posts, upload_post, delete_post, fetch_user_posts,
-    fetch_saved_posts, save_post, unsave_post, close_modal, update_errors
+    fetch_saved_posts, save_post, unsave_post, close_modal, update_errors, fetch_next_page
 } from "./posts"
 import {
     register, check_logged_in, update_username, show_notification, hide_notification
@@ -13,18 +13,25 @@ import {
 import axios from "axios"
 import URLS from "../urls"
 import {success_notification} from "../components/notifications"
+import {MyState} from "./store"
 
 const fetch_posts_epic: MyEpic = action$ => action$.pipe(
     filter(fetch_posts.match),
     mergeMap(_ => from(axios.get(URLS.POSTS, {withCredentials: true})).pipe(
-        map(({ data }) => set_posts(data.posts))
+        map(({ data }) => set_posts({
+            posts: data.posts,
+            cursor: data.cursor
+        }))
     ))
 )
 
 const fetch_saved_posts_epic: MyEpic = action$ => action$.pipe(
     filter(fetch_saved_posts.match),
     mergeMap(_ => from(axios.get(URLS.SAVED_POSTS, {withCredentials: true})).pipe(
-        map(({ data }) => set_posts(data.posts))
+        map(({ data }) => set_posts({
+            posts: data.posts,
+            cursor: data.cursor
+        }))
     ))
 )
 
@@ -33,8 +40,38 @@ const fetch_user_posts_epic: MyEpic = action$ => action$.pipe(
     mergeMap(({ payload }) => from(axios.get(
         URLS.POSTS_BY_USER(payload), {withCredentials: true}
     )).pipe(
-        map(({ data }) => set_posts(data.posts))
+        map(({ data }) => set_posts({
+            posts: data.posts,
+            cursor: data.cursor
+        }))
     ))
+)
+
+const fetch_next_page_epic: MyEpic = (action$, state$) => action$.pipe(
+    filter(fetch_next_page.match),
+    mergeMap(({ payload }) => {
+        const state = state$.value as MyState
+        let [mode, user] = state.posts.viewing_mode
+        return state.posts.cursor !== "" ?
+            from(axios.get(
+                (mode === "home" ?
+                    URLS.POSTS :
+                    mode === "user" ? 
+                        URLS.POSTS_BY_USER(user || "") :
+                        URLS.SAVED_POSTS)
+                + `?cursor=${state.posts.cursor}`,
+                {withCredentials: true}
+            )).pipe(
+                map(({ data }) => {
+                    payload.target.complete()
+                    return add_posts({
+                        posts: data.posts,
+                        cursor: data.cursor
+                    })
+                })
+            ) :
+            EMPTY
+    })
 )
 
 const upload_posts_epic: MyEpic = action$ => action$.pipe(
@@ -69,8 +106,11 @@ const upload_posts_epic: MyEpic = action$ => action$.pipe(
                 title: payload.title,
                 description: payload.description,
             }))
-            axios.post(URLS.UPLOAD_POST, form_data, {withCredentials: true})
-            return of(close_modal(), success_notification("Uploaded Post"))
+            return from(
+                axios.post(URLS.UPLOAD_POST, form_data, {withCredentials: true})
+            ).pipe(
+                mergeMap(_ => of(close_modal(), success_notification("Uploaded Post")))
+            )
         }
     })
 )
@@ -133,5 +173,5 @@ const show_notification_epic: MyEpic = action$ => action$.pipe(
 export {
     fetch_posts_epic, upload_posts_epic, register_epic, check_logged_in_epic,
     delete_post_epic, fetch_user_posts_epic, fetch_saved_posts_epic, save_post_epic,
-    unsave_post_epic, show_notification_epic
+    unsave_post_epic, show_notification_epic, fetch_next_page_epic
 }

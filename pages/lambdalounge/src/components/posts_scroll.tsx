@@ -1,36 +1,38 @@
-import {IonCard, IonGrid, IonRow, IonText, IonCol, IonIcon, useIonAlert, IonRouterLink} from "@ionic/react"
-import {trashOutline, bookmarkOutline, bookmark} from "ionicons/icons"
+import {IonCard, IonGrid, IonRow, IonText, IonCol, IonIcon, useIonAlert, IonRouterLink, useIonModal, IonButton, IonInfiniteScroll, IonInfiniteScrollContent} from "@ionic/react"
+import {trash, bookmarkOutline, bookmark} from "ionicons/icons"
 import React, { useEffect, useState } from "react"
 import {useLLDispatch, useLLSelector} from "../hooks"
 import {
-    delete_post, fetch_posts, fetch_user_posts, save_post, unsave_post
+    delete_post, fetch_next_page, fetch_posts, fetch_user_posts, save_post, unsave_post
 } from "../state/posts"
 import URLS from "../urls"
 import Masonry from "react-masonry-component"
+import {InfiniteScrollCustomEvent} from "../types"
 
-const ReadMore = (props: { description: string }) => {
-    const [collapsed, set_collapsed] = useState(true)
-    return <IonText
-        color="secondary"
-        class="ion-margin-top"
-    >
-        {collapsed ? 
-        <>
-            {props.description.slice(0, 128)}...
-            <br />
-            <br />
-            {props.description.length > 128 ? <IonText
-                class="ion-margin-top"
-                color="primary"
-            >
-                <IonRouterLink onClick={_ => set_collapsed(false)}>
-                    Read More
-                </IonRouterLink>
-            </IonText> : ""}
-        </> :
-        props.description}
-    </IonText>
-}
+const ImageModal: React.FC<{
+    url: string,
+    close: () => void
+}> = ({ url, close }) => <IonGrid style={{
+    display: "flex",
+    flexDirection: "column",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "end"
+}}>
+    <IonRow>
+        <IonCol>
+            <img
+                src={url}
+                style={{objectFit: "contain"}}
+            />
+        </IonCol>
+    </IonRow>
+    <IonRow>
+        <IonCol>
+            <IonButton onClick={_ => close()} color="primary">CLOSE</IonButton>
+        </IonCol>
+    </IonRow>
+</IonGrid>
 
 export default () => {
     const dispatch = useLLDispatch()
@@ -38,7 +40,15 @@ export default () => {
     const my_username = useLLSelector(s => s.user.username)
     const viewing_mode = useLLSelector(s => s.posts.viewing_mode)
 
+    const [modal_image, set_modal_image] = useState("")
+
     const [present] = useIonAlert()
+
+    const handleDismiss = () => dismissViewer()
+    const [presentViewer, dismissViewer] = useIonModal(ImageModal, {
+        url: modal_image,
+        close: handleDismiss
+    })
 
     useEffect(() => {
         dispatch(fetch_posts())
@@ -87,7 +97,7 @@ export default () => {
             </IonRow>
         </IonGrid> :
         <Masonry>
-            {posts.map(({title, description, username, saved}, idx) => <div
+            {posts.map(({title, description, username, saved, timestamp}, idx) => <div
                 key={idx}
                 style={{
                     width: "50%",
@@ -108,26 +118,31 @@ export default () => {
                             </IonCol>
                         </IonRow>
                         <IonRow>
-                            <IonCol size="9">
+                            <IonCol size="11">
                                 <IonText
                                     class="ion-margin-top"
                                     color="secondary"
                                 >
+                                    By 
                                     <IonRouterLink
                                         onClick={_ => dispatch(fetch_user_posts(username))}
+                                        style={{marginLeft: "0.5em"}}
                                     >
-                                        By {username}
+                                        {username}
                                     </IonRouterLink>
+                                    <span style={{marginLeft: "0.5em"}}>
+                                    | {(timestamp as string).split(" ")[0]}
+                                    </span>
                                 </IonText>
                             </IonCol>
-                            <IonCol size="3" style={{textAlign: "right"}}>
+                            <IonCol size="1" style={{textAlign: "right"}}>
                                 {username == my_username ? 
                                 <IonIcon
                                     style={{
                                         cursor: "pointer",
                                         color: "var(--danger)"
                                     }}
-                                    icon={trashOutline}
+                                    icon={trash}
                                     onClick={_ => present(
                                         "Do you really want to delete this post? \
                                             This cannot be undone.",
@@ -172,23 +187,39 @@ export default () => {
                         <IonRow>
                             <IonCol>
                                 <img
-                                    className="ion-margin-top"
                                     style={{
-                                        maxWidth: "100%"
+                                        maxWidth: "100%",
+                                        cursor: "pointer"
                                     }}
                                     src={URLS.POST_FILE(username, title)}
+                                    onClick={_ => {
+                                        set_modal_image(URLS.POST_FILE(username, title))
+                                        presentViewer({
+                                            cssClass: "image-modal"
+                                        })
+                                    }}
                                 />
                             </IonCol>
                         </IonRow>
                         <IonRow>
                             <IonCol>
-                                <ReadMore description={description} />
+                               <IonText
+                                    color="secondary"
+                                    class="ion-margin-top"
+                                >
+                                    {description}
+                                </IonText>
                             </IonCol>
                         </IonRow>
                     </IonGrid>
                 </IonCard>
             </div>)}
         </Masonry>}
+        <IonInfiniteScroll
+            onIonInfinite={e => dispatch(fetch_next_page(e as InfiniteScrollCustomEvent))}
+        >
+            <IonInfiniteScrollContent />
+        </IonInfiniteScroll>
     </>
 }
 

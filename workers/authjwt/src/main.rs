@@ -68,7 +68,6 @@ async fn auth_username(
 //Verify that the JWT is legitimate, returning the username if it is
 #[get("/verify")]
 async fn verify(req: HttpRequest, data: web::Data<AppState>) -> impl Responder {
-    println!("Verifying token...");
     let start = Instant::now();
     match req.cookie("token") {
         Some(cookie) => {
@@ -225,7 +224,6 @@ async fn main() -> std::io::Result<()> {
                 accesses: accesses.clone()
             }))
             .wrap_fn(|req, srv| {
-                println!("Request Received...");
                 srv.call(req).map(|res| res.map(|mut r| {
                     r.headers_mut().append(
                         header::ACCESS_CONTROL_ALLOW_ORIGIN,

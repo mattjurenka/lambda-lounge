@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit"
+import { InfiniteScrollCustomEvent, Post, PostValidationErrors, ViewingMode } from "../types"
 
 interface PostsState { 
     posts: Post[]
@@ -22,11 +23,19 @@ export const postsSlice = createSlice({
         }
     } as PostsState,
     reducers: {
-        set_posts: (state, { payload }: PayloadAction<Post[]>) => {
-            state.posts = payload
+        set_posts: (state, { payload }: PayloadAction<{
+            posts: Post[],
+            cursor: string
+        }>) => {
+            state.posts = payload.posts
+            state.cursor = payload.cursor
         },
-        add_posts: (state, { payload }: PayloadAction<Post[]>) => {
-            state.posts = state.posts.concat(payload)
+        add_posts: (state, { payload }: PayloadAction<{
+            posts: Post[],
+            cursor: string
+        }>) => {
+            state.posts = state.posts.concat(payload.posts)
+            state.cursor = payload.cursor
         },
         upload_post: (_state, _payload: PayloadAction<{
             title: string,
@@ -42,6 +51,7 @@ export const postsSlice = createSlice({
         fetch_saved_posts: state => {
             state.viewing_mode = ["saved"]
         },
+        fetch_next_page: (_state, _payload: PayloadAction<InfiniteScrollCustomEvent>) => {},
         delete_post: (_state, _payload: PayloadAction<string>) => {},
         save_post: (_state, _payload: PayloadAction<{
             username: string
@@ -61,12 +71,12 @@ export const postsSlice = createSlice({
             state.post_validation_errors = {
                 ...state.post_validation_errors, ...payload
             }
-        }
+        },
     }
 })
 
 export const {
     add_posts, set_posts, fetch_posts, upload_post, delete_post, fetch_user_posts,
-    fetch_saved_posts, save_post, unsave_post, open_modal, close_modal, update_errors
+    fetch_saved_posts, save_post, unsave_post, open_modal, close_modal, update_errors, fetch_next_page
 } = postsSlice.actions
 export default postsSlice.reducer

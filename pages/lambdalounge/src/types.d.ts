@@ -24,3 +24,7 @@ interface Notification {
 }
 
 type NotificationMap = {[key: number]: Notification | undefined}
+
+interface InfiniteScrollCustomEvent extends CustomEvent {
+    target: HTMLIonInfiniteScrollElement
+}

@@ -46,6 +46,14 @@ pub fn calculate_hash(username: &String, title: &String) -> String {
     hasher.finish().to_string()
 }
 
+//Get the cursor query param from a request
+pub fn get_cursor(req: &Request) -> Option<String> {
+    req.url().ok().and_then(|url| url.query_pairs()
+        .into_iter()
+        .find(|pair| pair.0 == "cursor")
+        .map(|(_, value)| value.into()))
+}
+
 #[derive(Deserialize, Serialize)]
 pub struct Post {
     pub title: String,

@@ -18,8 +18,9 @@ use std::borrow::Borrow;
 extern crate base64;
 
 mod utils;
-use utils::{Post, ListPostsResponse, calculate_hash};
+use utils::{Post, ListPostsResponse, calculate_hash, get_cursor};
 
+//Inspired by https://stackoverflow.com/a/61481605/
 async fn many<I, F>(iter: I) -> Vec<F::Output>
     where
         I: Iterator<Item=F>,
@@ -44,16 +45,15 @@ async fn verify_jwt(cookies: &String) -> Result<String> {
     let mut headers = Headers::new();
     headers.set("Cookie", cookies)?;
     let req = Request::new_with_init(
-        "http://0461-67-183-191-15.ngrok.io/verify",
+        "http://279a-67-183-191-15.ngrok.io/verify",
         RequestInit::new()
             .with_headers(headers)
             .with_method(Method::Get)
     )?;
-    let x = Fetch::Request(req);
-    let mut y = x.send().await?;
-    match y.status_code() {
-        200 => Ok(y.text().await?),
-        x => Err(format!("could not authenticate user, received code {}", x).into())
+    let mut response = Fetch::Request(req).send().await?;
+    match response.status_code() {
+        200 => Ok(response.text().await?),
+        status => Err(format!("could not authenticate user, received code {}", status).into())
     }
 }
 
@@ -93,7 +93,7 @@ pub async fn get_recent_posts(req: Request, ctx: RouteContext<()>) -> Result<Res
     };
 
     match get_posts(
-        PostMode::Recent, username, ctx.param("cursor"), &ctx
+        PostMode::Recent, username, get_cursor(&req), &ctx
     ).await {
         Ok(posts) => Response::from_json(&posts),
         Err(_) => Response::error("Unable to get posts", 500)
@@ -125,7 +125,6 @@ pub async fn post_posts(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
 
                     match verify_jwt(&cookie).await {
                         Ok(username) => {
-                            console_log!("Found username: {}", username);
                             let posts = ctx.kv("POSTS")?;
                             let post_files = ctx.kv("POST_FILES")?;
                             let timestamp_index = ctx.kv("TIMESTAMP_INDEX")?;
@@ -143,7 +142,7 @@ pub async fn post_posts(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
                             let rev_timestamp = utils::get_lexicographic_datetime(now);
 
                             //Update POSTS and POST_FILES
-                            join!(
+                            match join!(
                                 posts.put(&hash, serde_json::to_string(&post)?)?.execute(),
                                 post_files.put(
                                     &hash, base64::encode(buf.bytes().await?)
@@ -154,8 +153,10 @@ pub async fn post_posts(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
                                 timestamp_user_index.put(
                                     &format!("{}_{}_{}", username, rev_timestamp, hash), ""
                                 )?.execute(),
-                            );
-                            Response::empty()
+                            ) {
+                                (Ok(_), Ok(_), Ok(_), Ok(_)) => Response::empty(),
+                                _ => Response::error("Internal Server Error", 500)
+                            }
                         },
                         Err(_) => {
                             Response::error("Unable to verify identity", 403)
@@ -178,21 +179,21 @@ pub async fn delete_post(req: Request, ctx: RouteContext<()>) -> Result<Response
         req.headers().get("Cookie")
     ) {
         (Some(title), Ok(Some(cookies))) => {
-            console_log!("{}", cookies);
             match verify_jwt(&cookies).await {
                 Ok(username) => {
                     let posts = ctx.kv("POSTS")?;
                     let post_files = ctx.kv("POST_FILES")?;
 
                     let hash = calculate_hash(&username, &title.into_owned());
-                    join!(
+                    match join!(
                         posts.delete(&hash),
                         post_files.delete(&hash)
-                    );
-                    Response::ok("")
+                    ) {
+                        (Ok(_), Ok(_)) => Response::ok(""),
+                        _ => Response::error("Internal Server Error", 500)
+                    }
                 },
-                Err(e) => {
-                    console_log!("{}", e);
+                Err(_) => {
                     Response::error("Unable to authenticate user", 403)
                 }
             }
@@ -211,7 +212,7 @@ pub enum PostMode {
 pub async fn get_posts(
     mode: PostMode,
     requesting_user: Option<String>,
-    cursor: Option<&String>,
+    cursor: Option<String>,
     ctx: &RouteContext<()>
 ) -> Result<ListPostsResponse> {
     let posts_store = ctx.kv("POSTS")?;
@@ -223,7 +224,7 @@ pub async fn get_posts(
     let saved_store = ctx.kv("SAVED_INDEX")?;
 
     let mut posts_list_options = index.list()
-        .limit(25);
+        .limit(10);
     if let Some(username) = match mode {
         PostMode::OfUser(username) | PostMode::Saved(username) => Some(username),
         _ => None
@@ -284,7 +285,7 @@ pub async fn get_user_posts(req: Request, ctx: RouteContext<()>) -> Result<Respo
             match get_posts(
                 PostMode::OfUser(username.into()),
                 user_opt,
-                ctx.param("cursor"),
+                get_cursor(&req),
                 &ctx
             ).await {
                 Ok(posts) => Response::from_json(&posts),
@@ -332,7 +333,7 @@ pub async fn get_saved(req: Request, ctx: RouteContext<()>) -> Result<Response> 
                     match get_posts(
                         PostMode::Saved(username.clone()),
                         Some(username),
-                        ctx.param("cursor"),
+                        get_cursor(&req),
                         &ctx
                     ).await {
                         Ok(posts) => Response::from_json(&posts),
