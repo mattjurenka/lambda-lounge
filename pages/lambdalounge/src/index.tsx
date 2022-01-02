@@ -28,5 +28,5 @@ ReactDOM.render(
     <Provider store={store}>
         <Main />
     </Provider>,
-    document.querySelector('#root')
+    document.querySelector('#approot')
 );
