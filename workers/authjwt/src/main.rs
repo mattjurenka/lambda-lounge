@@ -227,7 +227,7 @@ async fn main() -> std::io::Result<()> {
                 srv.call(req).map(|res| res.map(|mut r| {
                     r.headers_mut().append(
                         header::ACCESS_CONTROL_ALLOW_ORIGIN,
-                        HeaderValue::from_str("http://127.0.0.1:4000").unwrap()
+                        HeaderValue::from_str(&env::var("FRONTEND_URL").unwrap()).unwrap()
                     );
                     r.headers_mut().append(
                         header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
