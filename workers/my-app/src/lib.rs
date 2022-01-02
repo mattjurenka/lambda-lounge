@@ -1,20 +1,12 @@
-use std::future::{Future};
-use futures::stream::FuturesUnordered;
+use std::future::Future;
+use futures::join;
+use futures::future::select_all;
+
 use worker::*;
 use worker::Response;
-use std::hash::Hash;
-use std::hash::Hasher;
-use futures::{join};
-use futures::future::{select_all};
+
 use chrono::prelude::*;
-use worker_sys::console_log;
-use futures::stream::{self, StreamExt};
-use std::pin::Pin;
-use std::sync::{Arc, Mutex};
-use std::rc::Rc;
-use std::iter;
 use urlencoding::decode;
-use std::borrow::Borrow;
 extern crate base64;
 
 mod utils;
@@ -41,11 +33,11 @@ async fn many<I, F>(iter: I) -> Vec<F::Output>
 }
 
 //Verify the user's identity by forwarding their cookies to the auth server
-async fn verify_jwt(cookies: &String) -> Result<String> {
+async fn verify_jwt(cookies: &String, url: &String) -> Result<String> {
     let mut headers = Headers::new();
     headers.set("Cookie", cookies)?;
     let req = Request::new_with_init(
-        "http://279a-67-183-191-15.ngrok.io/verify",
+        url,
         RequestInit::new()
             .with_headers(headers)
             .with_method(Method::Get)
@@ -88,7 +80,9 @@ pub async fn get_posts_file(_: Request, ctx: RouteContext<()>) -> Result<Respons
 //Gets recent posts by order of most to least recent
 pub async fn get_recent_posts(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let username = match req.headers().get("Cookie")? {
-        Some(cookies) => verify_jwt(&cookies).await.ok(),
+        Some(cookies) => verify_jwt(
+            &cookies, &ctx.secret("VERIFY_URL").unwrap().to_string()
+        ).await.ok(),
         None => None
     };
 
@@ -123,7 +117,10 @@ pub async fn post_posts(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
                         );
                     }
 
-                    match verify_jwt(&cookie).await {
+                    match verify_jwt(
+                        &cookie,
+                        &ctx.secret("VERIFY_URL").unwrap().to_string()
+                    ).await {
                         Ok(username) => {
                             let posts = ctx.kv("POSTS")?;
                             let post_files = ctx.kv("POST_FILES")?;
@@ -179,7 +176,10 @@ pub async fn delete_post(req: Request, ctx: RouteContext<()>) -> Result<Response
         req.headers().get("Cookie")
     ) {
         (Some(title), Ok(Some(cookies))) => {
-            match verify_jwt(&cookies).await {
+            match verify_jwt(
+                &cookies,
+                &ctx.secret("VERIFY_URL").unwrap().to_string()
+            ).await {
                 Ok(username) => {
                     let posts = ctx.kv("POSTS")?;
                     let post_files = ctx.kv("POST_FILES")?;
@@ -277,7 +277,10 @@ pub async fn get_posts(
 
 pub async fn get_user_posts(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let user_opt = match req.headers().get("Cookie")? {
-        Some(cookies) => verify_jwt(&cookies).await.ok(),
+        Some(cookies) => verify_jwt(
+            &cookies,
+            &ctx.secret("VERIFY_URL").unwrap().to_string()
+        ).await.ok(),
         None => None
     };
     match ctx.param("username").and_then(|v| decode(v).ok()) {
@@ -303,18 +306,20 @@ pub async fn add_saved(req: Request, ctx: RouteContext<()>) -> Result<Response> 
         ctx.param("title").and_then(|v| decode(v).ok())
     ) {
         (Ok(Some(cookies)), Some(username), Some(title)) => {
-            match verify_jwt(&cookies).await {
+            match verify_jwt(
+                &cookies,
+                &ctx.secret("VERIFY_URL").unwrap().to_string()
+            ).await {
                 Ok(authed_username) => {
                     let saved = ctx.kv("SAVED_INDEX")?;
                     
                     let hash = calculate_hash(&username.into(), &title.into());
-                    join!(
-                        saved.put(&format!(
-                            "{}_{}", authed_username, hash), ""
-                        )?.execute(),
-                    );
-
-                    Response::ok("")
+                    match saved.put(&format!(
+                        "{}_{}", authed_username, hash), ""
+                    )?.execute().await {
+                        Ok(_) => Response::ok(""),
+                        _ => Response::error("Internal server error", 500)
+                    }
                 },
                 Err(_) => Response::error("Unable to verify identity", 400)
             }
@@ -328,7 +333,10 @@ pub async fn add_saved(req: Request, ctx: RouteContext<()>) -> Result<Response> 
 pub async fn get_saved(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     match req.headers().get("Cookie") {
         Ok(Some(cookies)) => {
-            match verify_jwt(&cookies).await {
+            match verify_jwt(
+                &cookies,
+                &ctx.secret("VERIFY_URL").unwrap().to_string()
+            ).await {
                 Ok(username) => {
                     match get_posts(
                         PostMode::Saved(username.clone()),
@@ -354,7 +362,10 @@ pub async fn unsave(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         ctx.param("title").and_then(|v| decode(v).ok())
     ) {
         (Ok(Some(cookies)), Some(username), Some(title)) => {
-            match verify_jwt(&cookies).await {
+            match verify_jwt(
+                &cookies,
+                &ctx.secret("VERIFY_URL").unwrap().to_string()
+            ).await {
                 Ok(authed_username) => {
                     let saved_store = ctx.kv("SAVED_INDEX")?;
                     match saved_store.delete(&format!(
@@ -377,18 +388,9 @@ pub async fn unsave(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 #[event(fetch, respond_with_errors)]
 pub async fn main(req: Request, env: Env) -> Result<Response> {
 
-    // Create an instance of the Router, which can use paramaters (/user/:name) or wildcard values
-    // (/file/*pathname). Alternatively, use `Router::with_data(D)` and pass in arbitrary data for
-    // routes to access and share using the `ctx.data()` method.
     let router = Router::new();
-
     let response = router
-        //Get all posts ordered by most recent
-        //sorts the rev_timestamp -> post association
-        
-        //Get the top n keys on POSTS_TIMESTAMP
         .get_async("/posts/by_time/", get_recent_posts)
-        //Get the actual file associated with the post
         .get_async("/posts/file/:username/:title/", get_posts_file)
         .get_async("/posts/by_user/:username/", get_user_posts)
         .post_async("/posts/", post_posts)
@@ -423,43 +425,6 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
                 Ok(r)
             }
         )
-        //.get_async("/saved/check/:id/", |mut req, ctx| async move {
-        //    //Takes a user id, and a list of posts in the query param
-        //    //and returns the posts in that list that are saved
-        //    
-        //    //query SAVED_TIMESTAMP_HASH for a list of all posts saved by user
-        //    //respond with a comma seperated list of title hashes
-        //    todo!()
-        //})
-        //.get_async("/saved/:id/", |mut req, ctx| async move {
-        //    //Takes a user ID and returns all posts in most recent saved order
-
-        //    //query SAVED_TIMESTAMP_IDX, which returns a list of all saved title
-        //    //hashes sorted by most to least recent
-
-        //    //Query posts and posts_file for each hash to get the actual post
-        //    todo!()
-        //})
-        //.post_async("/save/:uid/:pid/", |mut req, ctx| async move {
-        //    //Mark user with uid as saving pid
-
-        //    //Set SAVED and SAVED_TIMESTAMP_IDX with the appropriate values
-        //    todo!()
-        //})
-        //.get_async("/comments/:pid/", |mut req, ctx| async move {
-        //    //Return all comments on a post
-
-        //    //list COMMENTS to get a sorted list of comments, then query again
-        //    //to get the actual comments and user info
-        //    todo!()
-        //})
-        //.post_async("/comment/:uid/:pid/", |mut req, ctx| async move {
-        //    //Mark user with uid with commenting on pid with comment as a query param
-
-        //    //Set COMMENTS and SAVED_TIMESTAMP_IDX with the appropriate value
-        //    //for each key, query for the comment again
-        //    todo!()
-        //})
         .run(req, env).await;
     //set CORS header
     response.map(|mut r| {
@@ -468,20 +433,3 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
         r
     })
 }
-
-//_ is used as a separator
-//POSTS
-//hash of title -> {title, description, user_id, timestamp, file}
-
-//POSTS_FILE
-//hash of title -> <img file>
-
-//TIMESTAMP_INDEX
-//rev timestamp_hash of title -> 0
-
-//TIMESTAMP_USER_INDEX
-//user id_timestamp_hash of title -> 0
-
-//SAVED
-//user id_hash of title -> 0
-

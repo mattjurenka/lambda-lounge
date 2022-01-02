@@ -1,7 +1,7 @@
 import {isFunction} from "lodash"
 
-const backend = "http://127.0.0.1:8787"
-const auth = "http://127.0.0.1:8080"
+const backend = process.env.BACKEND_URL
+const auth = process.env.AUTH_URL
 
 const urls = {
     AUTHENTICATE: (username: string) => auth + `/auth/${username}`,

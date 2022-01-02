@@ -1,6 +1,7 @@
 import path from "path";
 import { HotModuleReplacementPlugin } from "webpack";
 import HtmlWebpackPlugin from "html-webpack-plugin";
+import Dotenv from "dotenv-webpack";
 
 const config = {
     mode: "development",
@@ -42,6 +43,7 @@ const config = {
             favicon: "src/media/favicon.ico"
         }),
         new HotModuleReplacementPlugin(),
+        new Dotenv()
     ],
     devtool: "inline-source-map",
     devServer: {

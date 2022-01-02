@@ -3,13 +3,14 @@ type = "javascript"
 workers_dev = true
 compatibility_date = "2021-11-11"
 
+[env.production]
 kv_namespaces = [ 
-    { binding = "POSTS", preview_id = "57782d2d126042f29dc5e0d03460956f" },
-    { binding = "POST_FILES", preview_id = "f79de75abfad4f91bad5d24eeda195ad" },
-    { binding = "SAVED_INDEX", preview_id = "037664556f124e65bf7619eae27b852a"},
-    { binding = "SAVED_TIMESTAMP_INDEX", preview_id = "c7d22b976a98461b8834fa13cdb50f07"},
-    { binding = "TIMESTAMP_INDEX", preview_id = "08ff0d6214894b42bec91488727f84cd" },
-    { binding = "TIMESTAMP_USER_INDEX", preview_id = "0a6c83a7bc3e4612af33aa40f93b0734" },
+    { binding = "POSTS", id = "57782d2d126042f29dc5e0d03460956f", preview_id = "57782d2d126042f29dc5e0d03460956f" },
+    { binding = "POST_FILES", id = "f79de75abfad4f91bad5d24eeda195ad", preview_id = "f79de75abfad4f91bad5d24eeda195ad" },
+    { binding = "SAVED_INDEX", id = "037664556f124e65bf7619eae27b852a", preview_id = "037664556f124e65bf7619eae27b852a"},
+    { binding = "SAVED_TIMESTAMP_INDEX", id = "c7d22b976a98461b8834fa13cdb50f07", preview_id = "c7d22b976a98461b8834fa13cdb50f07"},
+    { binding = "TIMESTAMP_INDEX", id = "08ff0d6214894b42bec91488727f84cd", preview_id = "08ff0d6214894b42bec91488727f84cd" },
+    { binding = "TIMESTAMP_USER_INDEX", id = "0a6c83a7bc3e4612af33aa40f93b0734", preview_id = "0a6c83a7bc3e4612af33aa40f93b0734" },
 ]
 
 [vars]

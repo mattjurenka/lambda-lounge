@@ -1,11 +1,13 @@
-use cfg_if::cfg_if;
-use worker::*;
-use serde::{Deserialize, Serialize};
-use chrono::prelude::*;
 use std::char::from_digit;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hash;
 use std::hash::Hasher;
+
+use worker::*;
+
+use cfg_if::cfg_if;
+use serde::{Deserialize, Serialize};
+use chrono::prelude::*;
 
 cfg_if! {
     // https://github.com/rustwasm/console_error_panic_hook#readme
