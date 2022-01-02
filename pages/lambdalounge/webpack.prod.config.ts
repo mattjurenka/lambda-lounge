@@ -4,7 +4,7 @@ import HtmlWebpackPlugin from "html-webpack-plugin";
 import Dotenv from "dotenv-webpack";
 
 const config = {
-    mode: "development",
+    mode: "production",
     output: {
         publicPath: "/",
     },
