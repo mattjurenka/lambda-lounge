@@ -1,5 +1,5 @@
 import path from "path";
-import { HotModuleReplacementPlugin } from "webpack";
+import { HotModuleReplacementPlugin, EnvironmentPlugin } from "webpack";
 import HtmlWebpackPlugin from "html-webpack-plugin";
 
 const config = {
@@ -42,6 +42,7 @@ const config = {
             favicon: "src/media/favicon.ico"
         }),
         new HotModuleReplacementPlugin(),
+        new EnvironmentPlugin(["AUTH_URL", "BACKEND_URL"])
     ],
     devtool: "inline-source-map",
     devServer: {
