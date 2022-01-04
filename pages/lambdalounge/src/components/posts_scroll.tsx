@@ -1,7 +1,7 @@
 import {IonCard, IonGrid, IonRow, IonText, IonCol, IonIcon, useIonAlert, IonRouterLink, useIonModal, IonButton, IonInfiniteScroll, IonInfiniteScrollContent} from "@ionic/react"
 import {trash, bookmarkOutline, bookmark} from "ionicons/icons"
 import React, { useEffect, useState } from "react"
-import {useLLDispatch, useLLSelector} from "../hooks"
+import useWindowDimensions, {useLLDispatch, useLLSelector} from "../hooks"
 import {
     delete_post, fetch_next_page, fetch_posts, fetch_user_posts, save_post, unsave_post
 } from "../state/posts"
@@ -35,6 +35,8 @@ const ImageModal: React.FC<{
 </IonGrid>
 
 export default () => {
+    const { width } = useWindowDimensions()
+
     const dispatch = useLLDispatch()
     const posts = useLLSelector(s => s.posts.posts)
     const my_username = useLLSelector(s => s.user.username)
@@ -100,7 +102,8 @@ export default () => {
             {posts.map(({title, description, username, saved, timestamp}, idx) => <div
                 key={idx}
                 style={{
-                    width: "50%",
+                    width: width >= 1200 ? "33%" :
+                        width >= 720 ? "50%" : "100%",
                     margin: "0px"
                 }}
             >

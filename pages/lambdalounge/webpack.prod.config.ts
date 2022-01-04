@@ -42,7 +42,7 @@ const config = {
             favicon: "src/media/favicon.ico"
         }),
         new HotModuleReplacementPlugin(),
-        new EnvironmentPlugin(["AUTH_URL", "BACKEND_URL"])
+        new EnvironmentPlugin(["BACKEND_URL"])
     ],
     devtool: "inline-source-map",
     devServer: {
