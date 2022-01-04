@@ -2,5 +2,5 @@ Git Credentials:
 Username: h3mzlwwfThVsY6cMLJmpLdEjRLjlzBx
 Password: zWcFjvK6
 
-Workers URL: 
-Pages URL: 
+Workers URL: https://my-app-production.matthewjurenka.workers.dev
+Pages URL: https://lambda-lounge.pages.dev/
