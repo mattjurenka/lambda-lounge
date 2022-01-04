@@ -88,7 +88,7 @@ pub async fn auth_username(_: Request, ctx: RouteContext<()>) -> Result<Response
 pub async fn verify(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let username = match req.headers().get("Cookie")? {
         Some(cookies) => verify_jwt(
-            &cookies, &ctx.secret("VERIFY_URL").unwrap().to_string()
+            &cookies, &ctx.secret("AUTH_URL").unwrap().to_string()
         ).await.ok(),
         None => None
     };
@@ -131,7 +131,7 @@ pub async fn get_posts_file(_: Request, ctx: RouteContext<()>) -> Result<Respons
 pub async fn get_recent_posts(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let username = match req.headers().get("Cookie")? {
         Some(cookies) => verify_jwt(
-            &cookies, &ctx.secret("VERIFY_URL").unwrap().to_string()
+            &cookies, &ctx.secret("AUTH_URL").unwrap().to_string()
         ).await.ok(),
         None => None
     };
@@ -169,7 +169,7 @@ pub async fn post_posts(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
 
                     match verify_jwt(
                         &cookie,
-                        &ctx.secret("VERIFY_URL").unwrap().to_string()
+                        &ctx.secret("AUTH_URL").unwrap().to_string()
                     ).await {
                         Ok(username) => {
                             let posts = ctx.kv("POSTS")?;
@@ -228,7 +228,7 @@ pub async fn delete_post(req: Request, ctx: RouteContext<()>) -> Result<Response
         (Some(title), Ok(Some(cookies))) => {
             match verify_jwt(
                 &cookies,
-                &ctx.secret("VERIFY_URL").unwrap().to_string()
+                &ctx.secret("AUTH_URL").unwrap().to_string()
             ).await {
                 Ok(username) => {
                     let posts = ctx.kv("POSTS")?;
@@ -329,7 +329,7 @@ pub async fn get_user_posts(req: Request, ctx: RouteContext<()>) -> Result<Respo
     let user_opt = match req.headers().get("Cookie")? {
         Some(cookies) => verify_jwt(
             &cookies,
-            &ctx.secret("VERIFY_URL").unwrap().to_string()
+            &ctx.secret("AUTH_URL").unwrap().to_string()
         ).await.ok(),
         None => None
     };
@@ -358,7 +358,7 @@ pub async fn add_saved(req: Request, ctx: RouteContext<()>) -> Result<Response> 
         (Ok(Some(cookies)), Some(username), Some(title)) => {
             match verify_jwt(
                 &cookies,
-                &ctx.secret("VERIFY_URL").unwrap().to_string()
+                &ctx.secret("AUTH_URL").unwrap().to_string()
             ).await {
                 Ok(authed_username) => {
                     let saved = ctx.kv("SAVED_INDEX")?;
@@ -385,7 +385,7 @@ pub async fn get_saved(req: Request, ctx: RouteContext<()>) -> Result<Response> 
         Ok(Some(cookies)) => {
             match verify_jwt(
                 &cookies,
-                &ctx.secret("VERIFY_URL").unwrap().to_string()
+                &ctx.secret("AUTH_URL").unwrap().to_string()
             ).await {
                 Ok(username) => {
                     match get_posts(
@@ -414,7 +414,7 @@ pub async fn unsave(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         (Ok(Some(cookies)), Some(username), Some(title)) => {
             match verify_jwt(
                 &cookies,
-                &ctx.secret("VERIFY_URL").unwrap().to_string()
+                &ctx.secret("AUTH_URL").unwrap().to_string()
             ).await {
                 Ok(authed_username) => {
                     let saved_store = ctx.kv("SAVED_INDEX")?;
