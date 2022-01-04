@@ -1,10 +1,9 @@
 import {isFunction} from "lodash"
 
 const backend = process.env.BACKEND_URL
-const auth = process.env.AUTH_URL
 
 const urls = {
-    AUTHENTICATE: (username: string) => auth + `/auth/${username}`,
+    AUTHENTICATE: (username: string) => backend + `/auth/${username}`,
     DELETE_POST: (username: string, title: string) =>
         backend + `/posts/${username}/${title}/delete/`,
     POSTS: backend + "/posts/by_time/",
@@ -17,7 +16,7 @@ const urls = {
     UPLOAD_POST: backend + "/posts/",
     UNSAVE_POST: (username: string, title: string) =>
         backend + `/unsave/${username}/${title}/`,
-    VERIFY: auth + "/verify",
+    VERIFY: backend + "/verify",
 }
 
 const proxy = new Proxy(urls, {

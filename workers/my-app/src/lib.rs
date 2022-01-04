@@ -37,7 +37,7 @@ async fn verify_jwt(cookies: &String, url: &String) -> Result<String> {
     let mut headers = Headers::new();
     headers.set("Cookie", cookies)?;
     let req = Request::new_with_init(
-        url,
+        &format!("{}/verify", url),
         RequestInit::new()
             .with_headers(headers)
             .with_method(Method::Get)
@@ -46,6 +46,56 @@ async fn verify_jwt(cookies: &String, url: &String) -> Result<String> {
     match response.status_code() {
         200 => Ok(response.text().await?),
         status => Err(format!("could not authenticate user, received code {}", status).into())
+    }
+}
+
+pub async fn auth_username(_: Request, ctx: RouteContext<()>) -> Result<Response> {
+    match ctx.param("username").and_then(|encoded| decode(encoded).ok()) {
+        Some(username) => {
+            if username.chars().all(|c| c == ' ' || c.is_alphanumeric()) {
+                let req = Request::new_with_init(
+                    &format!(
+                        "{}/auth/{}",
+                        ctx.secret("AUTH_URL").unwrap().to_string(),
+                        username
+                    ),
+                    RequestInit::new()
+                        .with_method(Method::Get)
+                )?;
+                let mut response = Fetch::Request(req).send().await?;
+                match (response.status_code(), response.headers().get("Set-Cookie").unwrap()) {
+                    (200, Some(set_cookie)) => Response::ok(
+                            response.text().await.unwrap_or("".to_string())
+                        )
+                        .map(|res| {
+                            let mut headers = Headers::new();
+                            headers.set("Set-Cookie", &set_cookie).unwrap();
+                            res.with_headers(headers)
+                        }),
+                    (status, _) => Response::error(format!(
+                            "could not authenticate user, received code {}",
+                            status
+                        ), 500)
+                }
+            } else {
+                Response::error("Username can only contain alphanumerics or spaces", 400)
+            }
+        },
+        None => Response::error("Could not parse username", 400),
+    }
+}
+
+pub async fn verify(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let username = match req.headers().get("Cookie")? {
+        Some(cookies) => verify_jwt(
+            &cookies, &ctx.secret("VERIFY_URL").unwrap().to_string()
+        ).await.ok(),
+        None => None
+    };
+
+    match username {
+        Some(username) => Response::ok(username),
+        None => Response::error("Unable to verify identity", 400)
     }
 }
 
@@ -385,9 +435,16 @@ pub async fn unsave(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     }
 }
 
+pub async fn post_options(_: Request, _: RouteContext<()>) -> Result<Response> {
+    let mut r = Response::ok("").unwrap();
+    r.headers_mut().set("Allow", "POST").unwrap();
+    r.headers_mut().set("Access-Control-Allow-Headers", "content-type").unwrap();
+    Ok(r)
+}
+
 #[event(fetch, respond_with_errors)]
 pub async fn main(req: Request, env: Env) -> Result<Response> {
-
+    let frontend_url = &env.secret("FRONTEND_URL").unwrap().to_string();
     let router = Router::new();
     let response = router
         .get_async("/posts/by_time/", get_recent_posts)
@@ -395,40 +452,18 @@ pub async fn main(req: Request, env: Env) -> Result<Response> {
         .get_async("/posts/by_user/:username/", get_user_posts)
         .post_async("/posts/", post_posts)
         .post_async("/posts/:username/:title/delete/", delete_post)
-        .options(
-            "/posts/:username/:title/delete/",
-            |_, _| {
-                let mut r = Response::ok("").unwrap();
-                r.headers_mut().set("Allow", "POST").unwrap();
-                r.headers_mut().set("Access-Control-Allow-Headers", "content-type").unwrap();
-                Ok(r)
-            }
-        )
+        .options_async("/posts/:username/:title/delete/", post_options)
         .post_async("/save/:username/:title/", add_saved)
         .post_async("/unsave/:username/:title/", unsave)
         .get_async("/posts/saved/", get_saved)
-        .options(
-            "/save/:username/:title/",
-            |_, _| {
-                let mut r = Response::ok("").unwrap();
-                r.headers_mut().set("Allow", "POST").unwrap();
-                r.headers_mut().set("Access-Control-Allow-Headers", "content-type").unwrap();
-                Ok(r)
-            }
-        )
-        .options(
-            "/unsave/:username/:title/",
-            |_, _| {
-                let mut r = Response::ok("").unwrap();
-                r.headers_mut().set("Allow", "POST").unwrap();
-                r.headers_mut().set("Access-Control-Allow-Headers", "content-type").unwrap();
-                Ok(r)
-            }
-        )
+        .options_async("/save/:username/:title/", post_options)
+        .options_async("/unsave/:username/:title/", post_options)
+        .get_async("/auth/:username", auth_username)
+        .get_async("/verify", verify)
         .run(req, env).await;
     //set CORS header
     response.map(|mut r| {
-        r.headers_mut().set("Access-Control-Allow-Origin", "http://127.0.0.1:4000").unwrap();
+        r.headers_mut().set("Access-Control-Allow-Origin", &frontend_url).unwrap();
         r.headers_mut().set("Access-Control-Allow-Credentials", "true").unwrap();
         r
     })
