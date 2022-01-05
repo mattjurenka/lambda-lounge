@@ -1,6 +1,7 @@
 use std::env;
 use std::time::Instant;
 use std::fs;
+use std::str::from_utf8;
 
 use actix_web::{get, web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use actix_web::dev::Service;
@@ -48,7 +49,7 @@ async fn auth_username(
     let token = encode(
         &Header::new(Algorithm::RS256),
         &claims,
-        &EncodingKey::from_secret(env::var("PRIVATE_KEY").unwrap().as_bytes())
+        &EncodingKey::from_rsa_pem(include_bytes!("../key/jwt_key")).unwrap()
     ).unwrap();
     //Update MongoDB with the time it took to encode the JWT, creating
     //a new document and array if one does not already exist
@@ -64,7 +65,7 @@ async fn auth_username(
         .append_header(("Set-Cookie", format!(
             "token={}; HttpOnly; Path=/", token
         )))
-        .body(env::var("PUBLIC_KEY").unwrap())
+        .body(from_utf8(include_bytes!("../key/jwt_key.pub")).unwrap())
 }
 
 //Verify that the JWT is legitimate, returning the username if it is
@@ -76,8 +77,8 @@ async fn verify(req: HttpRequest, data: web::Data<AppState>) -> impl Responder {
             //Verify and decode the claims in the JWT cookie using our private key
             match decode::<Claims>(
                 cookie.value(),
-                &DecodingKey::from_secret(env::var("PUBLIC_KEY").unwrap().as_bytes()),
-                &Validation::default()
+                &DecodingKey::from_rsa_pem(include_bytes!("../key/jwt_key.pub")).unwrap(),
+                &Validation::new(Algorithm::RS256)
             ) {
                 Ok(claims) => {
                     //Push the time taken to decode the JWT to MongoDB under
@@ -92,17 +93,15 @@ async fn verify(req: HttpRequest, data: web::Data<AppState>) -> impl Responder {
                     HttpResponse::Ok()
                         .body(claims.claims.sub)
                 },
-                Err(_) => {
+                Err(e) => {
                     HttpResponse::BadRequest()
-                        .reason("Invalid Token")
-                        .body("")
+                        .body("Invalid Token")
                 }
             }
         },
         None => {
             HttpResponse::BadRequest()
-                .reason("No 'token' Cookie Found")
-                .body("")
+                .body("No 'token' Cookie Found")
         }
     }
 }
@@ -110,76 +109,72 @@ async fn verify(req: HttpRequest, data: web::Data<AppState>) -> impl Responder {
 //Get stats about how long it took to encode and decode the JWTs
 #[get("/stats")]
 async fn stats(req: HttpRequest, data: web::Data<AppState>) -> impl Responder {
-    match req.cookie("token") {
+    let user = match req.cookie("token") {
         Some(cookie) => {
             //Decode the JWT with our private key
             match decode::<Claims>(
                 cookie.value(),
-                &DecodingKey::from_secret(env::var("PRIVATE_KEY").unwrap().as_bytes()),
-                &Validation::default()
+                &DecodingKey::from_rsa_pem(include_bytes!("../key/jwt_key.pub")).unwrap(),
+                &Validation::new(Algorithm::RS256)
             ) {
-                Ok(claims) => {
-                    //Query MongoDB for the access_info document
-                    match data.get_ref().accesses.find_one(
-                        doc!( "username": claims.claims.sub ),
-                        FindOneOptions::default()
-                    ).await.unwrap() {
-                        Some(access_info) => {
-                            //Set totals and ns to 0 if not present, otherwise sum and len
-                            //of their respective vectors
-                            let (total_verify, n_verifies) = match access_info.verify_times {
-                                Some(vec) => (vec.iter().sum::<f64>(), vec.len()),
-                                None => (0.0, 0)
-                            };
-                            let (total_auth, n_auths) = match access_info.auth_times {
-                                Some(vec) => (vec.iter().sum::<f64>(), vec.len()),
-                                None => (0.0, 0)
-                            };
-
-                            //Calculate the averages, or set to None if necessary
-                            let avg_encode = if n_auths > 0 {
-                                Some(total_auth / (n_auths as f64))
-                            } else {
-                                None
-                            };
-                            let avg_decode = if n_verifies > 0 {
-                                Some(total_verify / (n_verifies as f64))
-                            } else {
-                                None
-                            };
-                            let avg_total = if (n_auths + n_verifies) > 0 {
-                                Some(
-                                    (total_verify + total_auth)
-                                    / ((n_auths + n_verifies) as f64)
-                                )
-                            } else {
-                                None
-                            };
-
-                            HttpResponse::Ok()
-                                .json(PrettyAccessInfo {
-                                    avg_auth_encode_seconds: avg_encode,
-                                    avg_verify_decode_seconds: avg_decode,
-                                    avg_total_ops_seconds: avg_total,
-                                })
-                        },
-                        None => HttpResponse::BadRequest()
-                            .reason("Username not found")
-                            .body("")
-                    }
-                },
-                Err(_) => {
-                    HttpResponse::BadRequest()
-                        .reason("Invalid Token")
-                        .body("")
-                }
+                Ok(claims) => Some(claims.claims.sub),
+                Err(_) => None
             }
         },
-        None => {
-            HttpResponse::BadRequest()
-                .reason("No 'token' Cookie Found")
-                .body("")
-        }
+        None => Some("mattjurenka".to_string())
+    };
+    match user {
+        Some(username) => {
+            //Query MongoDB for the access_info document
+            match data.get_ref().accesses.find_one(
+                doc!( "username": username ),
+                FindOneOptions::default()
+            ).await.unwrap() {
+                Some(access_info) => {
+                    //Set totals and ns to 0 if not present, otherwise sum and len
+                    //of their respective vectors
+                    let (total_verify, n_verifies) = match access_info.verify_times {
+                        Some(vec) => (vec.iter().sum::<f64>(), vec.len()),
+                        None => (0.0, 0)
+                    };
+                    let (total_auth, n_auths) = match access_info.auth_times {
+                        Some(vec) => (vec.iter().sum::<f64>(), vec.len()),
+                        None => (0.0, 0)
+                    };
+
+                    //Calculate the averages, or set to None if necessary
+                    let avg_encode = if n_auths > 0 {
+                        Some(total_auth / (n_auths as f64))
+                    } else {
+                        None
+                    };
+                    let avg_decode = if n_verifies > 0 {
+                        Some(total_verify / (n_verifies as f64))
+                    } else {
+                        None
+                    };
+                    let avg_total = if (n_auths + n_verifies) > 0 {
+                        Some(
+                            (total_verify + total_auth)
+                            / ((n_auths + n_verifies) as f64)
+                        )
+                    } else {
+                        None
+                    };
+
+                    HttpResponse::Ok()
+                        .json(PrettyAccessInfo {
+                            avg_auth_encode_seconds: avg_encode,
+                            avg_verify_decode_seconds: avg_decode,
+                            avg_total_ops_seconds: avg_total,
+                        })
+                },
+                None => HttpResponse::BadRequest()
+                    .body("Username not found")
+            }
+        },
+        None => HttpResponse::BadRequest()
+            .body("Could not authenticate user")
     }
 }
 
