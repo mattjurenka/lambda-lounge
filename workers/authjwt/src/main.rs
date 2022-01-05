@@ -14,7 +14,9 @@ use mongodb::{
 };
 use mongodb::bson::doc;
 
-use jsonwebtoken::{encode, decode, Header, Validation, EncodingKey, DecodingKey};
+use jsonwebtoken::{
+    encode, decode, Header, Validation, EncodingKey, DecodingKey, Algorithm
+};
 use serde::{Serialize, Deserialize};
 use chrono::prelude::*;
 use dotenv;
@@ -44,7 +46,7 @@ async fn auth_username(
         exp: expiration as usize,
     };
     let token = encode(
-        &Header::default(),
+        &Header::new(Algorithm::RS256),
         &claims,
         &EncodingKey::from_secret(env::var("PRIVATE_KEY").unwrap().as_bytes())
     ).unwrap();
@@ -74,7 +76,7 @@ async fn verify(req: HttpRequest, data: web::Data<AppState>) -> impl Responder {
             //Verify and decode the claims in the JWT cookie using our private key
             match decode::<Claims>(
                 cookie.value(),
-                &DecodingKey::from_secret(env::var("PRIVATE_KEY").unwrap().as_bytes()),
+                &DecodingKey::from_secret(env::var("PUBLIC_KEY").unwrap().as_bytes()),
                 &Validation::default()
             ) {
                 Ok(claims) => {
