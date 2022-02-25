@@ -1,4 +1,4 @@
-Lambda Lounge is a social mini-blog platform made for coding enthusiasts to
+```Lambda Lounge is a social mini-blog platform made for coding enthusiasts to
 share code snippets, design patterns, and other ideas related to functional
 programming. The main feature is the ability for users to post an image along
 with a short description. Users can view the post history of others, save posts
@@ -73,4 +73,4 @@ Cloudflare, I'm happy I did this project to the level of quality I did, I
 learned a ton about a bunch of different topics, from distributed design to
 WASM to the semantics of cookies and CORS. Even though I do reasonably well
 in school, the vast majority of my learning comes from personal projects like
-this one, and lambda lounge is no exception.
+this one, and lambda lounge is no exception.```
